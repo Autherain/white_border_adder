@@ -66,6 +66,12 @@ All parameters can be customized using command-line flags:
   - ⏱️ Processing times
   - 📊 Batch statistics
 
+## Project Preview
+
+|              Original               |                 With Borders                 |
+| :---------------------------------: | :------------------------------------------: |
+| ![Original](IMG_1264_converted.jpg) | ![Bordered](bordered_IMG_1264_converted.jpg) |
+
 ## Performance Tips
 
 1. Adjust `-batch-size` based on your system's memory
