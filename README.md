@@ -14,6 +14,13 @@ I was frustrated to have no reliable and easy solution to add white borders to m
 - 📁 Option to create a separate output folder
 - ⚙️ Highly configurable through command-line flags
 
+
+## Project Preview
+
+|              Original               |                 With Borders                 |
+| :---------------------------------: | :------------------------------------------: |
+| ![Original](IMG_1264_converted.jpg) | ![Bordered](bordered_IMG_1264_converted.jpg) |
+
 ## Quick Start
 
 ```bash
@@ -65,12 +72,6 @@ All parameters can be customized using command-line flags:
   - ❌ Failed images (if any)
   - ⏱️ Processing times
   - 📊 Batch statistics
-
-## Project Preview
-
-|              Original               |                 With Borders                 |
-| :---------------------------------: | :------------------------------------------: |
-| ![Original](IMG_1264_converted.jpg) | ![Bordered](bordered_IMG_1264_converted.jpg) |
 
 ## Performance Tips
 
