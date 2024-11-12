@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/jpeg"
 	"image/png"
 	"os"
@@ -386,20 +385,19 @@ func processImage(inputPath, outputPath string, config *Config) error {
 	scaledWidth := int(float64(origWidth) * scale)
 	scaledHeight := int(float64(origHeight) * scale)
 
+	// Create the white background image
 	newImg := image.NewRGBA(image.Rect(0, 0, config.targetWidth, config.targetHeight))
-	for y := 0; y < config.targetHeight; y++ {
-		for x := 0; x < config.targetWidth; x++ {
-			newImg.Set(x, y, color.White)
-		}
-	}
+	draw.Draw(newImg, newImg.Bounds(), image.White, image.Point{}, draw.Src)
 
-	scaledImg := image.NewRGBA(image.Rect(0, 0, scaledWidth, scaledHeight))
-	draw.ApproxBiLinear.Scale(scaledImg, scaledImg.Bounds(), img, img.Bounds(), draw.Over, nil)
-
+	// Calculate the position to place the scaled image
 	offsetX := (config.targetWidth - scaledWidth) / 2
 	offsetY := (config.targetHeight - scaledHeight) / 2
 
-	drawImage(newImg, scaledImg, image.Point{X: offsetX, Y: offsetY})
+	// Create a rectangle for the destination area
+	destRect := image.Rect(offsetX, offsetY, offsetX+scaledWidth, offsetY+scaledHeight)
+
+	// Scale and draw the image in one step using draw.ApproxBiLinear
+	draw.ApproxBiLinear.Scale(newImg, destRect, img, img.Bounds(), draw.Over, nil)
 
 	output, err := os.Create(outputPath)
 	if err != nil {
