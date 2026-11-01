@@ -7,7 +7,7 @@ sharing, and deletes the Panasonic raws that RawTherapee never developed.
 wba border <dir>            # write <dir>/bordered/bordered_<name>.jpg for every JPEG and PNG
 wba compress <dir>          # write <dir>/compressed/compressed_<name>.jpg, smaller
 wba clean <dir>             # delete raws without a developed copy in <dir>/converted/
-wba <verb> <dir> --apply    # verbs only print what they would do until you add --apply
+wba <verb> <dir> --apply    # verbs only show what they would do until you add --apply
 ```
 
 |              Original               |                 With borders                 |
@@ -25,11 +25,30 @@ wba <verb> <dir> --apply    # verbs only print what they would do until you add 
 | **Candidate** | A raw that is not developed and whose stem matches no `--exclude` glob. |
 | **Sidecar** | The `<raw name>.pp3` file RawTherapee leaves next to the raw. A candidate's sidecar is deleted with it; the sidecar of a raw that is kept is kept. |
 
-## Shared flags
+## How a verb runs
+
+Every verb plans first, then shows the plan, then does only what you
+confirmed. Without `--apply` nothing is ever written or deleted.
+
+| You run | In a terminal | Piped, or with `--plain` |
+|---|---|---|
+| `wba clean <dir>` | A scrollable list of what would be deleted, with sizes and a total. Read-only: `q` closes it. | One `would delete ...` line per file, then the total. Exit 0. |
+| `wba clean <dir> --apply` | The same list as a checklist, everything ticked. `space` unticks the one under the cursor, `a` ticks all or none, `enter` deletes what is ticked, `q` leaves without deleting. | Deletes everything in the plan, one `deleted ...` line per file, then the total. |
+
+```
+Choose what to delete
+
+> [x] IMG_1264.RW2 + IMG_1264.RW2.pp3  24 MB
+  [x] IMG_1271.RW2  25 MB
+  [ ] IMG_1300.RW2  1 kB
+
+space toggle · a all/none · enter delete 3 files, 49 MB · q quit
+```
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--apply` | false | Do it. Without this flag a verb prints one `would ...` line per action and a total, and changes nothing. |
+| `--apply` | false | Do it, after the checklist in a terminal, straight away with `--plain`. |
+| `--plain` | false | Print lines instead of the interactive list. Implied when stdout is not a terminal, so scripts never block. |
 | `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories and `converted/`. |
 | `--verbose` | false | Also print skipped items and why. |
 
@@ -54,7 +73,7 @@ a white canvas, centred, scaled to leave the border ratios below.
 | `--workers` | number of CPUs | Photos processed at once. |
 
 ```
-$ wba border 2024-10-paris
+$ wba border 2024-10-paris --plain
 would write bordered/bordered_IMG_1264.jpg
 would write bordered/bordered_IMG_1271.jpg
 2 files. Re-run with --apply to write them.
@@ -79,7 +98,7 @@ out larger than the original, and the total says so.
 | `--workers` | number of CPUs | Photos processed at once. |
 
 ```
-$ wba compress 2024-10-paris --max-width 2048 --apply
+$ wba compress 2024-10-paris --max-width 2048 --apply --plain
 wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 4.0 MB
 1 file written, 7.5 MB saved.
 ```
@@ -113,18 +132,21 @@ Before:
 ```
 
 ```
-$ wba clean 2024-10-paris
+$ wba clean 2024-10-paris --plain
 would delete IMG_1264.RW2
 would delete IMG_1264.RW2.pp3
 would delete IMG_1271.RW2
 3 files, 49 MB. Re-run with --apply to delete them.
 
-$ wba clean 2024-10-paris --apply
+$ wba clean 2024-10-paris --apply --plain
 deleted IMG_1264.RW2
 deleted IMG_1264.RW2.pp3
 deleted IMG_1271.RW2
 3 files deleted, 49 MB freed.
 ```
+
+Without `--plain` the same two runs show the list on screen: read-only the
+first time, as a checklist the second, where `enter` deletes what is ticked.
 
 After:
 
@@ -156,14 +178,18 @@ from the latest GitHub release.
    `wba.exe` and put it in a folder on your `PATH`, for example
    `C:\Users\<you>\bin`. To add that folder to `PATH`, open
    *Edit the system environment variables* and append it to the user `Path`.
-2. Open PowerShell in the photo directory (Shift + right click, *Open
-   PowerShell window here*) and run the verbs on `.`:
+2. Open PowerShell or Windows Terminal in the photo directory (Shift +
+   right click, *Open PowerShell window here*) and run the verbs on `.`:
 
 ```
-wba clean .
-wba clean . --apply
+wba clean .             # look at the list, q to close
+wba clean . --apply     # untick what you keep, enter to delete
 wba border . --apply
+wba compress . --max-width 2048 --apply
 ```
+
+The interactive list needs Windows Terminal or PowerShell; the old
+`cmd.exe` console works too but without colours.
 
 Paths work with either slash: `wba clean D:\photos\2024-10-paris` and
 `wba clean D:/photos/2024-10-paris` are the same.
