@@ -26,12 +26,24 @@ wba <verb> <dir> --apply    # verbs only print what they would do until you add 
 
 ## How a verb runs
 
-Every verb plans first and prints the plan, one `would ...` line per file,
-then the total. With `--recursive` each directory opens with a
-`####### <dir>: <count>, <size>` banner. Nothing is written or deleted
-until you add `--apply`, which does the whole plan and prints the same
-lines in the past tense. Errors are printed with the same `#######`
-banner on stderr.
+Every verb plans first and prints the plan, one `would ...` line per file.
+With `--recursive` each directory opens with a `####### <dir>: <count>,
+<size>` banner. The plan ends with a recap: one line per directory saying
+what goes and what `--exclude` keeps, with sizes, then the totals.
+
+```
+####### recap
+delete  20260620_toulouse       64 files, 633 MB
+keep    20260701_portait_marie  21 files, 317 MB  --exclude *marie*
+delete  20260810_suisse         14 files, 156 MB
+keep    20260810_suisse         99 files, 1.8 GB  --exclude _13409*
+####### 71 files flagged: has a .pp3 but nothing in converted/
+182 files, 2.2 GB, 169 files, 2.9 GB kept. Re-run with --apply to delete them.
+```
+
+Nothing is written or deleted until you add `--apply`, which does the
+plan, prints the same lines in the past tense and the same recap. Errors
+are printed with the `#######` banner on stderr.
 
 `clean` marks a raw that has a `.pp3` sidecar but nothing in `converted/`
 with `####### has a .pp3 but nothing in converted/`: you edited it in
