@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/evaneecloo/white_border_adder/internal/clean"
@@ -67,44 +68,30 @@ what each kept, with sizes.`,
 }
 
 func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
-	candidates, err := clean.Plan(ctx, a.fs, dir, o)
+	result, err := clean.Plan(ctx, a.fs, dir, o)
 	if err != nil {
 		return err
 	}
 
-	if len(candidates) == 0 {
+	candidates := result.Candidates
+	skips := skippedItems(dir, result.Skipped)
+
+	if len(candidates) == 0 && len(skips) == 0 {
 		log.Infof(ctx, "%s", styleFaint.Render("nothing to do"))
 
 		return nil
 	}
 
-	items := make([]item, 0, len(candidates))
+	items := cleanItems(dir, candidates)
 
-	for _, c := range candidates {
-		it := item{
-			dir:   rel(dir, filepath.Dir(c.Path)),
-			files: relAll(dir, c.Files()),
-			size:  c.Size + c.SidecarSize,
-			kept:  c.Kept,
-		}
-
-		// A sidecar without an export means time was spent on this raw in
-		// RawTherapee; worth a look before it goes.
-		if c.Sidecar != "" {
-			it.warn = "has a .pp3 but nothing in converted/"
-		}
-
-		items = append(items, it)
-	}
-
-	chosen := a.show(ctx, verbDelete, items)
+	chosen := a.show(ctx, verbDelete, items, skips)
 	if len(chosen) == 0 {
 		return nil
 	}
 
 	failed := a.deleteAll(ctx, dir, pickFrom(candidates, chosen))
 
-	for _, line := range recap(verbDelete, items, finished) {
+	for _, line := range recap(verbDelete, items, skips, finished) {
 		log.Infof(ctx, "%s", line)
 	}
 
@@ -131,6 +118,50 @@ func (a *app) deleteAll(ctx context.Context, dir string, candidates []clean.Cand
 	}
 
 	return failed
+}
+
+func cleanItems(dir string, candidates []clean.Candidate) []item {
+	items := make([]item, 0, len(candidates))
+
+	for _, c := range candidates {
+		it := item{
+			dir:   rel(dir, filepath.Dir(c.Path)),
+			files: relAll(dir, c.Files()),
+			size:  c.Size + c.SidecarSize,
+			kept:  c.Kept,
+		}
+
+		// A sidecar without an export means time was spent on this raw in
+		// RawTherapee; worth a look before it goes.
+		if c.Sidecar != "" {
+			it.warn = "has a .pp3 but nothing in converted/"
+		}
+
+		items = append(items, it)
+	}
+
+	return items
+}
+
+func skippedItems(dir string, dirs []clean.Skipped) []skipped {
+	skips := make([]skipped, 0, len(dirs))
+
+	for _, sk := range dirs {
+		skips = append(skips, skipped{
+			dir:    rel(dir, sk.Path),
+			detail: fmt.Sprintf("%d %s, %s, no converted/: not sorted yet", sk.Raws, raws(sk.Raws), human(sk.Size)),
+		})
+	}
+
+	return skips
+}
+
+func raws(n int) string {
+	if n == 1 {
+		return "raw"
+	}
+
+	return "raws"
 }
 
 func relAll(dir string, paths []string) []string {

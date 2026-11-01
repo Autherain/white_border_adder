@@ -90,7 +90,7 @@ func TestShow(t *testing.T) {
 
 			a, ctx, out := testApp(false)
 
-			if chosen := a.show(ctx, tt.verb, tt.items); chosen != nil {
+			if chosen := a.show(ctx, tt.verb, tt.items, nil); chosen != nil {
 				t.Fatalf("dry run chose %v", chosen)
 			}
 
@@ -107,9 +107,26 @@ func TestShowApply(t *testing.T) {
 	a, ctx, out := testApp(true)
 
 	chosen := a.show(ctx, verbDelete,
-		[]item{{files: []string{"a"}}, {files: []string{"b"}, kept: "b"}, {files: []string{"c"}}})
+		[]item{{files: []string{"a"}}, {files: []string{"b"}, kept: "b"}, {files: []string{"c"}}}, nil)
 	if !slices.Equal(chosen, []int{0, 2}) || out.Len() != 0 {
 		t.Fatalf("apply: chosen = %v, output = %q", chosen, out.String())
+	}
+}
+
+func TestShowSkippedAndNothingToRun(t *testing.T) {
+	t.Parallel()
+
+	a, ctx, out := testApp(false)
+	a.show(ctx, verbDelete,
+		[]item{{dir: "paris", files: []string{"paris/IMG_1264.RW2"}, size: 24_000_000, kept: "not in --only *lyon*"}},
+		[]skipped{{dir: "liechtenstein", detail: "124 raws, 2.4 GB, no converted/: not sorted yet"}})
+
+	want := "####### recap\n" +
+		"keep    paris          1 file, 24 MB  not in --only *lyon*\n" +
+		"skip    liechtenstein  124 raws, 2.4 GB, no converted/: not sorted yet\n" +
+		"nothing to do, 1 file, 24 MB kept.\n"
+	if out.String() != want {
+		t.Fatalf("output:\n%s\nwant:\n%s", out.String(), want)
 	}
 }
 
@@ -127,12 +144,12 @@ func TestRecapDone(t *testing.T) {
 		"keep    .  1 file, 2.0 MB  --exclude IMG_13*",
 		"2 files deleted, 24 MB freed, 1 file, 2.0 MB kept.",
 	}
-	if got := recap(verbDelete, items, finished); !slices.Equal(got, want) {
+	if got := recap(verbDelete, items, nil, finished); !slices.Equal(got, want) {
 		t.Fatalf("recap = %q, want %q", got, want)
 	}
 
 	one := []item{{dir: ".", files: []string{"bordered/bordered_a.jpg"}}}
-	if got := recap(verbWrite, one, finished); !slices.Equal(got, []string{"1 file written."}) {
+	if got := recap(verbWrite, one, nil, finished); !slices.Equal(got, []string{"1 file written."}) {
 		t.Fatalf("recap = %q", got)
 	}
 }

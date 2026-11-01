@@ -41,6 +41,20 @@ type Candidate struct {
 	Kept string
 }
 
+// A Skipped directory holds raws but no converted/, so no sorting happened
+// there and clean leaves it alone; the raw count says what is waiting in it.
+type Skipped struct {
+	Path string
+	Raws int
+	Size int64
+}
+
+// Result is the plan: what would go or is kept, and what was not even looked at.
+type Result struct {
+	Candidates []Candidate
+	Skipped    []Skipped
+}
+
 // Files lists the paths Delete would remove: the raw, then the sidecar when present.
 func (c Candidate) Files() []string {
 	files := []string{c.Path}
@@ -63,38 +77,39 @@ func (c Candidate) Delete(fs afero.Fs) error {
 	return errors.Join(errs...)
 }
 
-func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate, error) {
+func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) (Result, error) {
 	info, err := fs.Stat(dir)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s: not a directory", dir)
+		return Result{}, fmt.Errorf("%s: not a directory", dir)
 	}
 
 	// path.Match only reports a malformed pattern when it reaches the bad part, so a
 	// probe against an empty name validates every pattern before any listing happens.
 	for _, glob := range append(append([]string{o.Pattern}, o.Exclude...), o.Only...) {
 		if _, err := path.Match(glob, ""); err != nil {
-			return nil, fmt.Errorf("%q: %w", glob, err)
+			return Result{}, fmt.Errorf("%q: %w", glob, err)
 		}
 	}
 
-	found, err := scanTree(ctx, fs, dir, o)
+	result, err := scanTree(ctx, fs, dir, o)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 
-	candidates := found
+	candidates := result.Candidates
 
 	for i := range candidates {
 		candidates[i].Kept = kept(relative(dir, candidates[i].Path), o)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
+	sort.Slice(result.Skipped, func(i, j int) bool { return result.Skipped[i].Path < result.Skipped[j].Path })
 
-	return candidates, nil
+	return result, nil
 }
 
 // skipped names the directories a recursive walk never enters: hidden ones and
@@ -112,36 +127,49 @@ type listed struct {
 	dir        string
 	candidates []Candidate
 	subdirs    []string
-	skipped    bool
+	skipped    *Skipped
 }
 
-func scanTree(ctx context.Context, fs afero.Fs, root string, o Options) ([]Candidate, error) {
+func scanTree(ctx context.Context, fs afero.Fs, root string, o Options) (Result, error) {
 	pool := pond.NewResultPool[listed](listers)
 	defer pool.StopAndWait()
 
-	candidates := []Candidate{}
+	result := Result{Candidates: []Candidate{}, Skipped: []Skipped{}}
 	level := []string{root}
 
 	for len(level) > 0 {
 		got, err := scanLevel(pool, fs, level, o)
 		if err != nil {
-			return nil, err
+			return Result{}, err
 		}
 
 		level = nil
 
 		for _, l := range got {
-			// Logged here rather than in the task so the lines keep the listing order.
-			if l.skipped {
-				log.Debugf(ctx, "skip %s: no %s/", relative(root, l.dir), convertedDir)
-			}
-
-			candidates = append(candidates, l.candidates...)
+			result.add(ctx, root, l)
 			level = append(level, l.subdirs...)
 		}
 	}
 
-	return candidates, nil
+	return result, nil
+}
+
+// add folds one listed directory into the result. Logged here rather than in
+// the task so the lines keep the listing order.
+func (r *Result) add(ctx context.Context, root string, l listed) {
+	r.Candidates = append(r.Candidates, l.candidates...)
+
+	if l.skipped == nil {
+		return
+	}
+
+	log.Debugf(ctx, "skip %s: no %s/", relative(root, l.dir), convertedDir)
+
+	// A directory without raws is just a container (the year folder, a
+	// JPEG-only shoot); only one holding raws is worth a recap line.
+	if l.skipped.Raws > 0 {
+		r.Skipped = append(r.Skipped, *l.skipped)
+	}
 }
 
 func scanLevel(pool pond.ResultPool[listed], fs afero.Fs, dirs []string, o Options) ([]listed, error) {
@@ -182,7 +210,7 @@ func scan(fs afero.Fs, dir string, o Options) (listed, error) {
 	if developed, ok := convertedNames(fs, dir, listing[convertedDir]); ok {
 		got.candidates = candidatesIn(dir, entries, listing, developed, o)
 	} else {
-		got.skipped = true
+		got.skipped = waiting(dir, entries, o)
 	}
 
 	if !o.Recursive {
@@ -196,6 +224,25 @@ func scan(fs afero.Fs, dir string, o Options) (listed, error) {
 	}
 
 	return got, nil
+}
+
+// waiting counts the raws of a directory clean will not touch, so the recap
+// can say what is sitting there unsorted.
+func waiting(dir string, entries []os.FileInfo, o Options) *Skipped {
+	skipped := &Skipped{Path: dir}
+
+	for _, entry := range entries {
+		if !entry.Mode().IsRegular() {
+			continue
+		}
+
+		if ok, _ := path.Match(o.Pattern, strings.ToLower(entry.Name())); ok {
+			skipped.Raws++
+			skipped.Size += entry.Size()
+		}
+	}
+
+	return skipped
 }
 
 func candidatesIn(dir string, entries []os.FileInfo, listing map[string]os.FileInfo, developed []string,
