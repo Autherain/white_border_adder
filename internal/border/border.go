@@ -168,10 +168,11 @@ func (p *planner) existing(photoDir string) (map[string]bool, error) {
 	return names, nil
 }
 
-// skipDir keeps the walk out of hidden directories, RawTherapee's converted/
-// and our own output directory, so bordered files are never bordered again.
+// skipDir keeps the walk out of hidden directories and of wba's own outputs,
+// so a second run never borders a bordered or compressed copy. RawTherapee's
+// converted/ is entered on purpose: that is where the exports to border live.
 func (p *planner) skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "converted" || name == p.outBase()
+	return strings.HasPrefix(name, ".") || name == "compressed" || name == p.outBase()
 }
 
 func (p *planner) outBase() string {

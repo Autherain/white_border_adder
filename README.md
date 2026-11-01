@@ -42,7 +42,7 @@ with `--exclude <stem>`.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--apply` | false | Do it. Without this flag a verb only prints what it would do. |
-| `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories and `converted/`. |
+| `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories. `clean` also skips `converted/`, which holds no raws; `border` and `compress` enter it, since that is where the exports are, and skip only their own `bordered/` and `compressed/`. |
 | `--verbose` | false | Also print skipped items and why. |
 
 A file that fails is printed on stderr with its error, the verb goes on, and

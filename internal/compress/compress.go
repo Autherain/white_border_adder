@@ -172,10 +172,11 @@ func (p *planner) existing(photoDir string) (map[string]bool, error) {
 	return names, nil
 }
 
-// skipDir keeps the walk out of hidden directories, RawTherapee's converted/,
-// the border verb's output and our own, so a copy is never compressed again.
+// skipDir keeps the walk out of hidden directories and of wba's own outputs,
+// so a second run never compresses a bordered or compressed copy. RawTherapee's
+// converted/ is entered on purpose: that is where the exports to shrink live.
 func (p *planner) skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "converted" || name == "bordered" || name == p.outBase()
+	return strings.HasPrefix(name, ".") || name == "bordered" || name == p.outBase()
 }
 
 func (p *planner) outBase() string {

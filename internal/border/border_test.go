@@ -107,12 +107,13 @@ func TestPlan(t *testing.T) {
 			},
 		},
 		{
-			name: "recursive skips converted, bordered and dot dirs",
+			name: "recursive enters converted, skips bordered and dot dirs",
 			opts: func(o Options) Options { o.Recursive = true; return o },
 			want: []Job{
 				{"photos/2024-10-paris/IMG_7.jpg", "photos/2024-10-paris/bordered/bordered_IMG_7.jpg"},
 				{"photos/IMG_2.JPEG", "photos/bordered/bordered_IMG_2.JPEG"},
 				{"photos/IMG_3.png", "photos/bordered/bordered_IMG_3.png"},
+				{"photos/converted/IMG_5.jpg", "photos/converted/bordered/bordered_IMG_5.jpg"},
 			},
 			skip: "skip IMG_1.jpg: output exists\n",
 		},
