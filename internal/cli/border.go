@@ -69,9 +69,9 @@ func (a *app) runBorder(ctx context.Context, dir string, o border.Options, worke
 		items = append(items, item{files: []string{rel(dir, j.Out)}})
 	}
 
-	chosen, err := a.picker().pick(ctx, verbWrite, items)
-	if err != nil || len(chosen) == 0 {
-		return err
+	chosen := a.show(ctx, verbWrite, items)
+	if len(chosen) == 0 {
+		return nil
 	}
 
 	picked := pickFrom(jobs, chosen)

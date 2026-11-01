@@ -13,6 +13,10 @@ import (
 
 type ctxKey struct{}
 
+// Banner opens every line that needs a second look, so it stands out in a
+// long list and can be grepped.
+const Banner = "#######"
+
 var (
 	styleDebug = lipgloss.NewStyle().Faint(true)
 	styleError = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
@@ -65,7 +69,7 @@ func (h handler) Handle(_ context.Context, r slog.Record) error {
 
 	switch {
 	case r.Level >= slog.LevelError:
-		line, w = styleError.Render(line), h.errOut
+		line, w = styleError.Render(Banner+" "+line), h.errOut
 	case r.Level <= slog.LevelDebug:
 		line = styleDebug.Render(line)
 	default:

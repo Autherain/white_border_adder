@@ -42,13 +42,22 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 	}
 
 	items := make([]item, 0, len(candidates))
+
 	for _, c := range candidates {
-		items = append(items, item{files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize})
+		it := item{files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize}
+
+		// A sidecar without an export means time was spent on this raw in
+		// RawTherapee; worth a look before it goes.
+		if c.Sidecar != "" {
+			it.warn = "edited, never exported"
+		}
+
+		items = append(items, it)
 	}
 
-	chosen, err := a.picker().pick(ctx, verbDelete, items)
-	if err != nil || len(chosen) == 0 {
-		return err
+	chosen := a.show(ctx, verbDelete, items)
+	if len(chosen) == 0 {
+		return nil
 	}
 
 	failed, done := a.deleteAll(ctx, dir, pickFrom(candidates, chosen))

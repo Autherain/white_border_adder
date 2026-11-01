@@ -9,7 +9,6 @@ import (
 	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // Set at build time with -ldflags "-X .../internal/cli.version=...".
@@ -17,17 +16,15 @@ var version = "dev"
 
 type app struct {
 	fs        afero.Fs
-	stdin     io.Reader
 	stdout    io.Writer
 	stderr    io.Writer
 	apply     bool
-	plain     bool
 	recursive bool
 	verbose   bool
 }
 
-func Root(fs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	a := &app{fs: fs, stdin: stdin, stdout: stdout, stderr: stderr}
+func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
+	a := &app{fs: fs, stdout: stdout, stderr: stderr}
 
 	root := &cobra.Command{
 		Use:           "wba",
@@ -51,7 +48,6 @@ func Root(fs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) *cobra.Command
 
 	flags := root.PersistentFlags()
 	flags.BoolVar(&a.apply, "apply", false, "do it; without this flag nothing is written or deleted")
-	flags.BoolVar(&a.plain, "plain", false, "print lines instead of the interactive list; implied outside a terminal")
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
@@ -69,12 +65,6 @@ func versionCmd() *cobra.Command {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), version)
 		},
 	}
-}
-
-func isTerminal(stream any) bool {
-	f, ok := stream.(interface{ Fd() uintptr })
-
-	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // rel prints paths the way the user typed the argument, not as the fs joined them.

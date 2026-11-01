@@ -32,7 +32,7 @@ func TestLevels(t *testing.T) {
 			t.Errorf("verbose=%v stdout = %q, want %q", verbose, out.String(), wantOut)
 		}
 
-		if errOut.String() != "c: boom\n" {
+		if errOut.String() != "####### c: boom\n" {
 			t.Errorf("verbose=%v stderr = %q", verbose, errOut.String())
 		}
 	}

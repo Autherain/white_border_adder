@@ -53,9 +53,9 @@ func (a *app) runCompress(ctx context.Context, dir string, o compress.Options, w
 		items = append(items, item{files: []string{rel(dir, j.Out)}, size: j.Size})
 	}
 
-	chosen, err := a.picker().pick(ctx, verbWrite, items)
-	if err != nil || len(chosen) == 0 {
-		return err
+	chosen := a.show(ctx, verbWrite, items)
+	if len(chosen) == 0 {
+		return nil
 	}
 
 	picked := pickFrom(jobs, chosen)
