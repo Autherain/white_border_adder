@@ -15,7 +15,6 @@ import (
 
 	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
-	"golang.org/x/image/draw"
 )
 
 const (
@@ -26,10 +25,7 @@ const (
 
 type Options struct {
 	JPEGQuality int
-	// MaxWidth and MaxHeight bound the output; 0 leaves that side unbounded.
-	// An image already inside the bounds is re-encoded at its own size.
-	MaxWidth, MaxHeight int
-	Prefix              string
+	Prefix      string
 	// Out is the output directory: "" means "<photo dir>/compressed", a relative
 	// path is joined to each photo dir, an absolute path is used as is.
 	Out       string
@@ -74,8 +70,6 @@ func (j Job) Run(fsys afero.Fs, o Options) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	img = shrink(img, o)
 
 	if err := fsys.MkdirAll(filepath.Dir(j.Out), dirPerm); err != nil {
 		return 0, fmt.Errorf("create output directory: %w", err)
@@ -272,39 +266,4 @@ func encode(w io.Writer, path string, img image.Image, quality int) error {
 	}
 
 	return jpeg.Encode(w, img, &jpeg.Options{Quality: quality})
-}
-
-// shrink returns img itself when it already fits, so an unchanged image is
-// not resampled and loses nothing but encoder precision.
-func shrink(img image.Image, o Options) image.Image {
-	bounds := img.Bounds()
-
-	w, h := fit(bounds.Dx(), bounds.Dy(), o.MaxWidth, o.MaxHeight)
-	if w == bounds.Dx() && h == bounds.Dy() {
-		return img
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
-
-	return dst
-}
-
-// fit scales w x h down to sit inside maxW x maxH, keeping the ratio and
-// never growing it; 0 on a side means that side is unbounded. Integer
-// arithmetic keeps a bound exact where a float scale would round it away.
-func fit(w, h, maxW, maxH int) (fitW, fitH int) {
-	fitW, fitH = w, h
-
-	if maxW > 0 && fitW > maxW {
-		fitH = fitH * maxW / fitW
-		fitW = maxW
-	}
-
-	if maxH > 0 && fitH > maxH {
-		fitW = fitW * maxH / fitH
-		fitH = maxH
-	}
-
-	return fitW, fitH
 }

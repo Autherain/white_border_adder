@@ -36,32 +36,6 @@ func newTree(t *testing.T, files map[string]string) afero.Fs {
 	return fs
 }
 
-func TestFit(t *testing.T) {
-	tests := []struct {
-		name             string
-		w, h, maxW, maxH int
-		wantW, wantH     int
-	}{
-		{"no limit", 4000, 3000, 0, 0, 4000, 3000},
-		{"width bound", 4000, 3000, 2000, 0, 2000, 1500},
-		{"height bound", 4000, 3000, 0, 1500, 2000, 1500},
-		{"both, tighter side wins", 4000, 3000, 2000, 600, 800, 600},
-		{"smaller than limit stays", 800, 600, 2000, 2000, 800, 600},
-		{"portrait width only", 3000, 4000, 1080, 0, 1080, 1440},
-		{"floors odd ratios", 4000, 3000, 1001, 0, 1001, 750},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w, h := fit(tt.w, tt.h, tt.maxW, tt.maxH)
-			if w != tt.wantW || h != tt.wantH {
-				t.Errorf("fit(%d, %d, %d, %d) = %d x %d, want %d x %d",
-					tt.w, tt.h, tt.maxW, tt.maxH, w, h, tt.wantW, tt.wantH)
-			}
-		})
-	}
-}
-
 func TestPlan(t *testing.T) {
 	tree := map[string]string{
 		"photos/IMG_1.jpg":                       "jpeg",

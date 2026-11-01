@@ -18,14 +18,13 @@ func (a *app) compressCmd() *cobra.Command {
 		Short: "Write a smaller copy of every JPEG and PNG in <dir>",
 		Long: `Write a smaller copy of every JPEG and PNG at the root of <dir>.
 
-Each photo is downscaled to fit --max-width and --max-height (never
-upscaled), JPEGs re-encoded at --jpeg-quality, PNGs at the best
-compression level, and written as <dir>/compressed/compressed_<name>.
+JPEGs are re-encoded at --jpeg-quality, PNGs at the best compression
+level, same pixel size, and written as <dir>/compressed/compressed_<name>.
 The originals are never modified.
 
-At the default quality of 100 the saving comes from the size limit, so
-give one: a JPEG re-encoded at 100 with no limit can come out larger, and
-the total says so. Nothing is written without --apply.`,
+The only lever is --jpeg-quality. At 100 a JPEG usually comes out larger
+than the original and the total says so; 85 is where the loss stops being
+visible on a screen. Nothing is written without --apply.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
@@ -36,8 +35,6 @@ the total says so. Nothing is written without --apply.`,
 
 	f := cmd.Flags()
 	f.IntVar(&o.JPEGQuality, "jpeg-quality", defaultJPEGQuality, "JPEG output quality, 1-100")
-	f.IntVar(&o.MaxWidth, "max-width", 0, "downscale to fit this width; 0 keeps the size")
-	f.IntVar(&o.MaxHeight, "max-height", 0, "downscale to fit this height; 0 keeps the size")
 	f.StringVar(&o.Prefix, "prefix", "compressed_", "prefix of the output file name")
 	f.StringVar(&o.Out, "out", "", "output directory (default <dir>/compressed, per photo directory with --recursive)")
 	f.BoolVar(&o.Force, "force", false, "overwrite an output file that already exists")

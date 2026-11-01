@@ -75,25 +75,31 @@ would write bordered/bordered_IMG_1271.jpg
 ## wba compress <dir>
 
 Writes a smaller copy of every `.jpg`, `.jpeg` and `.png` at the root of
-`<dir>`: downscaled to fit `--max-width` and `--max-height`, JPEGs
-re-encoded at `--jpeg-quality`, PNGs at the best compression level. Photos
-are never upscaled. At the default quality the saving comes from the size
-limit, so give one; a JPEG re-encoded at quality 100 with no limit can come
-out larger than the original, and the total says so.
+`<dir>`: JPEGs re-encoded at `--jpeg-quality`, PNGs at the best
+compression level, same pixel size. The only lever is the quality. At 100
+a JPEG usually comes out larger than the original, and the total says so;
+85 is where the loss stops being visible on a screen.
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--jpeg-quality` | 100 | JPEG output quality. |
-| `--max-width`, `--max-height` | 0 | Downscale to fit inside, keeping the ratio. 0 keeps the size. |
 | `--prefix` | `compressed_` | Prefix of the output file name. |
 | `--out` | `<dir>/compressed` | Output directory. Relative to each photo directory with `--recursive`. |
 | `--force` | false | Overwrite an output file that already exists; otherwise it is skipped. |
 | `--workers` | number of CPUs | Photos processed at once. |
 
+Measured on the sample photo of this repository:
+
+| `--jpeg-quality` | Output | Result |
+|---|---|---|
+| 100 | 13 MB | 1.1 MB larger |
+| 95 | 7.4 MB | 4.2 MB saved |
+| 85 | 3.8 MB | 7.7 MB saved |
+
 ```
-$ wba compress 2024-10-paris --max-width 2048 --apply
-wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 4.0 MB
-1 file written, 7.5 MB saved.
+$ wba compress 2024-10-paris --jpeg-quality 85 --apply
+wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 3.8 MB
+1 file written, 7.7 MB saved.
 ```
 
 ## wba clean <dir>
@@ -175,7 +181,7 @@ from the latest GitHub release.
 wba clean .             # read the list, nothing is deleted
 wba clean . --apply     # delete it
 wba border . --apply
-wba compress . --max-width 2048 --apply
+wba compress . --jpeg-quality 85 --apply
 ```
 
 Paths work with either slash: `wba clean D:\photos\2024-10-paris` and
