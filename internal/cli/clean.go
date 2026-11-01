@@ -43,7 +43,11 @@ Look at it before --apply, or keep it with --exclude.
 --exclude takes a glob and keeps every raw whose name without extension
 matches it (--exclude IMG_1264, --exclude 'IMG_12*'), or whose path below
 <dir> has a directory matching it (--exclude '*marie*' keeps a whole
-shoot). Repeat the flag for several patterns; case does not matter.`,
+shoot). --only is the mirror: when given, only the raws matching one of
+its globs go, everything else is kept (--only '*suisse*' cleans one
+shoot out of a year). --exclude wins when both match. Repeat either flag
+for several patterns; case does not matter. The recap at the end lists
+what each kept, with sizes.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
@@ -56,6 +60,8 @@ shoot). Repeat the flag for several patterns; case does not matter.`,
 	f.StringVar(&o.Pattern, "pattern", "*.rw2", "glob on the file name that marks a raw")
 	f.StringArrayVar(&o.Exclude, "exclude", nil,
 		"glob on a raw's name without extension or on a directory of its path, to keep; repeatable")
+	f.StringArrayVar(&o.Only, "only", nil,
+		"same kind of glob; when given, only the raws it matches go, the rest is kept; repeatable")
 
 	return cmd
 }
@@ -79,7 +85,7 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 			dir:   rel(dir, filepath.Dir(c.Path)),
 			files: relAll(dir, c.Files()),
 			size:  c.Size + c.SidecarSize,
-			kept:  c.KeptBy,
+			kept:  c.Kept,
 		}
 
 		// A sidecar without an export means time was spent on this raw in

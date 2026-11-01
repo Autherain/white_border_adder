@@ -148,8 +148,8 @@ func recapGroups(verb string, groups []group, at stage) []string {
 		}
 
 		if kept := keptOf(g.items); len(kept) > 0 {
-			lines = append(lines, styleFaint.Render(fmt.Sprintf("%-7s %-*s  %s  --exclude %s",
-				"keep", width, g.dir, summary(kept), strings.Join(reasons(kept), " "))))
+			lines = append(lines, styleFaint.Render(fmt.Sprintf("%-7s %-*s  %s  %s",
+				"keep", width, g.dir, summary(kept), strings.Join(reasons(kept), ", "))))
 		}
 	}
 

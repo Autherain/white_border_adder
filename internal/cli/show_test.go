@@ -36,9 +36,9 @@ func TestShow(t *testing.T) {
 	kept := []item{
 		{dir: "paris", files: []string{"paris/IMG_1264.RW2", "paris/IMG_1264.RW2.pp3"}, size: 24_012_000},
 		{dir: "paris", files: []string{"paris/IMG_1271.RW2"}, size: 25_000_000},
-		{dir: "paris", files: []string{"paris/IMG_1300.RW2"}, size: 2_000_000, kept: "IMG_13*"},
-		{dir: "marie/portrait", files: []string{"marie/portrait/IMG_1.RW2"}, size: 20_000_000, kept: "*marie*"},
-		{dir: "marie/portrait", files: []string{"marie/portrait/IMG_2.RW2"}, size: 20_000_000, kept: "*marie*"},
+		{dir: "paris", files: []string{"paris/IMG_1300.RW2"}, size: 2_000_000, kept: "--exclude IMG_13*"},
+		{dir: "marie/portrait", files: []string{"marie/portrait/IMG_1.RW2"}, size: 20_000_000, kept: "--exclude *marie*"},
+		{dir: "marie/portrait", files: []string{"marie/portrait/IMG_2.RW2"}, size: 20_000_000, kept: "--exclude *marie*"},
 	}
 	warned := []item{
 		{files: []string{"IMG_1264.RW2", "IMG_1264.RW2.pp3"}, size: 24_012_000, warn: "has a .pp3 but nothing in converted/"},
@@ -118,7 +118,7 @@ func TestRecapDone(t *testing.T) {
 
 	items := []item{
 		{dir: ".", files: []string{"IMG_1264.RW2", "IMG_1264.RW2.pp3"}, size: 24_012_000},
-		{dir: ".", files: []string{"IMG_1300.RW2"}, size: 2_000_000, kept: "IMG_13*"},
+		{dir: ".", files: []string{"IMG_1300.RW2"}, size: 2_000_000, kept: "--exclude IMG_13*"},
 	}
 
 	want := []string{

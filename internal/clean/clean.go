@@ -21,8 +21,12 @@ const (
 )
 
 type Options struct {
-	Pattern   string
+	Pattern string
+	// Exclude globs keep what they match; Only globs, when given, keep
+	// everything they do not match. Both see the stem, each directory of the
+	// path below the argument, and the whole path.
 	Exclude   []string
+	Only      []string
 	Recursive bool
 }
 
@@ -31,9 +35,10 @@ type Candidate struct {
 	Size        int64
 	Sidecar     string
 	SidecarSize int64
-	// KeptBy is the --exclude glob that keeps this candidate, "" when it goes.
-	// Kept candidates stay in the plan so the caller can say what was spared.
-	KeptBy string
+	// Kept says why this candidate stays ("--exclude *marie*", "not in --only
+	// *suisse*"), "" when it goes. Kept candidates stay in the plan so the
+	// caller can say what was spared.
+	Kept string
 }
 
 // Files lists the paths Delete would remove: the raw, then the sidecar when present.
@@ -70,7 +75,7 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate,
 
 	// path.Match only reports a malformed pattern when it reaches the bad part, so a
 	// probe against an empty name validates every pattern before any listing happens.
-	for _, glob := range append([]string{o.Pattern}, o.Exclude...) {
+	for _, glob := range append(append([]string{o.Pattern}, o.Exclude...), o.Only...) {
 		if _, err := path.Match(glob, ""); err != nil {
 			return nil, fmt.Errorf("%q: %w", glob, err)
 		}
@@ -84,7 +89,7 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate,
 	candidates := found
 
 	for i := range candidates {
-		candidates[i].KeptBy = excluded(relative(dir, candidates[i].Path), o.Exclude)
+		candidates[i].Kept = kept(relative(dir, candidates[i].Path), o)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
@@ -267,10 +272,24 @@ func isDeveloped(stem string, converted []string) bool {
 	return false
 }
 
-// excluded returns the first glob matching the raw's name without extension,
+// kept is the reason a candidate stays: an --exclude glob it matches, or no
+// --only glob matching it when --only is given. "" means it goes.
+func kept(rel string, o Options) string {
+	if glob := matching(rel, o.Exclude); glob != "" {
+		return "--exclude " + glob
+	}
+
+	if len(o.Only) > 0 && matching(rel, o.Only) == "" {
+		return "not in --only " + strings.Join(o.Only, " ")
+	}
+
+	return ""
+}
+
+// matching returns the first glob matching the raw's name without extension,
 // a directory of its path below the argument, or that whole path, so
-// "--exclude IMG_12*" keeps a photo and "--exclude *marie*" keeps a shoot.
-func excluded(rel string, globs []string) string {
+// "IMG_12*" targets a photo and "*marie*" targets a shoot.
+func matching(rel string, globs []string) string {
 	rel = strings.ToLower(filepath.ToSlash(rel))
 	stem := strings.TrimSuffix(rel, path.Ext(rel))
 	names := append(strings.Split(stem, "/"), stem)

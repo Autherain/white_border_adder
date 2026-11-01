@@ -405,12 +405,12 @@ func TestPlanExcludeDirectory(t *testing.T) {
 
 			// Kept candidates stay in the plan, marked with the glob that kept them.
 			for _, c := range all {
-				if c.KeptBy == "" {
+				if c.Kept == "" {
 					continue
 				}
 
-				if !slices.Contains(tt.exclude, c.KeptBy) {
-					t.Errorf("%s kept by %q, not one of %v", c.Path, c.KeptBy, tt.exclude)
+				if !slices.Contains(tt.exclude, strings.TrimPrefix(c.Kept, "--exclude ")) {
+					t.Errorf("%s kept by %q, not one of %v", c.Path, c.Kept, tt.exclude)
 				}
 			}
 
@@ -425,10 +425,56 @@ func toDelete(all []Candidate) []Candidate {
 	out := []Candidate{}
 
 	for _, c := range all {
-		if c.KeptBy == "" {
+		if c.Kept == "" {
 			out = append(out, c)
 		}
 	}
 
 	return out
+}
+
+func TestPlanOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		only []string
+		want []string
+		kept string
+	}{
+		{"by shoot directory", []string{"*luchon*"},
+			[]string{"2025/20250804_luchon/_1310726.RW2", "2025/20250804_luchon/_1310752.RW2"}, ""},
+		{"by stem", []string{"_1310726"}, []string{"2025/20250804_luchon/_1310726.RW2"}, "not in --only _1310726"},
+		{"no match keeps everything", []string{"*paris*"}, []string{}, "not in --only *paris*"},
+		{"exclude wins over only", []string{"*luchon*"}, []string{"2025/20250804_luchon/_1310752.RW2"}, "--exclude _1310726"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := newTree(t, rawTherapeeLayout)
+
+			opts := Options{Pattern: "*.rw2", Recursive: true, Only: tt.only}
+			if tt.name == "exclude wins over only" {
+				opts.Exclude = []string{"_1310726"}
+			}
+
+			all, err := Plan(context.Background(), fs, "2025", opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			paths := []string{}
+			for _, c := range toDelete(all) {
+				paths = append(paths, c.Path)
+			}
+
+			if !reflect.DeepEqual(paths, tt.want) {
+				t.Fatalf("candidates = %v, want %v", paths, tt.want)
+			}
+
+			for _, c := range all {
+				if c.Kept != "" && c.Kept != tt.kept {
+					t.Errorf("%s kept: %q, want %q", c.Path, c.Kept, tt.kept)
+				}
+			}
+		})
+	}
 }
