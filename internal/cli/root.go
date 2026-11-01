@@ -26,7 +26,7 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 
 	root := &cobra.Command{
 		Use:           "wba",
-		Short:         "White borders for Instagram and cleanup of undeveloped raws",
+		Short:         "White borders, smaller copies and cleanup of undeveloped raws",
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 			// Flags are parsed by now: a failure from here on is a runtime
@@ -42,7 +42,7 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
-	root.AddCommand(a.borderCmd(), a.cleanCmd(), versionCmd())
+	root.AddCommand(a.borderCmd(), a.cleanCmd(), a.compressCmd(), versionCmd())
 
 	return root
 }

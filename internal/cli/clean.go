@@ -98,8 +98,10 @@ func human(bytes int64) string {
 	switch {
 	case bytes >= gb:
 		return fmt.Sprintf("%.1f GB", float64(bytes)/gb)
-	case bytes >= mb:
+	case bytes >= 10*mb:
 		return fmt.Sprintf("%d MB", (bytes+mb/2)/mb)
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/mb)
 	case bytes >= kb:
 		return fmt.Sprintf("%d kB", (bytes+kb/2)/kb)
 	default:

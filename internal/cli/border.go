@@ -2,7 +2,6 @@ package cli
 
 import (
 	"runtime"
-	"sync"
 
 	"github.com/evaneecloo/white_border_adder/internal/border"
 	"github.com/spf13/cobra"
@@ -85,41 +84,14 @@ type result struct {
 	err error
 }
 
-// writeAll runs the jobs on a worker pool and prints each outcome as it
-// lands; the caller gets the failure count.
 func (a *app) writeAll(dir string, jobs []border.Job, o border.Options, workers int) int {
-	if workers < 1 {
-		workers = 1
-	}
-
-	queue := make(chan border.Job, len(jobs))
-	results := make(chan result, len(jobs))
-
-	var wg sync.WaitGroup
-
-	for range workers {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for j := range queue {
-				results <- result{job: j, err: j.Run(a.fs, o)}
-			}
-		}()
-	}
-
-	for _, j := range jobs {
-		queue <- j
-	}
-
-	close(queue)
-	wg.Wait()
-	close(results)
+	results := runAll(workers, jobs, func(j border.Job) result {
+		return result{job: j, err: j.Run(a.fs, o)}
+	})
 
 	failed := 0
 
-	for r := range results {
+	for _, r := range results {
 		if r.err != nil {
 			failed++
 

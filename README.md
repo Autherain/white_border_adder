@@ -1,13 +1,13 @@
 # wba
 
-`wba` adds white borders to photos so they fit Instagram, and deletes the
-Panasonic raws that RawTherapee never developed.
+`wba` adds white borders to photos so they fit Instagram, shrinks them for
+sharing, and deletes the Panasonic raws that RawTherapee never developed.
 
 ```
 wba border <dir>            # write <dir>/bordered/bordered_<name>.jpg for every JPEG and PNG
+wba compress <dir>          # write <dir>/compressed/compressed_<name>.jpg, smaller
 wba clean <dir>             # delete raws without a developed copy in <dir>/converted/
 wba <verb> <dir> --apply    # verbs only print what they would do until you add --apply
-wba <verb> <dir> --recursive --verbose
 ```
 
 |              Original               |                 With borders                 |
@@ -58,6 +58,27 @@ $ wba border 2024-10-paris
 would write bordered/bordered_IMG_1264.jpg
 would write bordered/bordered_IMG_1271.jpg
 2 files. Re-run with --apply to write them.
+```
+
+## wba compress <dir>
+
+Writes a smaller copy of every `.jpg`, `.jpeg` and `.png` at the root of
+`<dir>`: JPEGs re-encoded at a lower quality, PNGs at the best compression
+level, both optionally downscaled. Photos are never upscaled.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--jpeg-quality` | 85 | JPEG output quality. |
+| `--max-width`, `--max-height` | 0 | Downscale to fit inside, keeping the ratio. 0 keeps the size. |
+| `--prefix` | `compressed_` | Prefix of the output file name. |
+| `--out` | `<dir>/compressed` | Output directory. Relative to each photo directory with `--recursive`. |
+| `--force` | false | Overwrite an output file that already exists; otherwise it is skipped. |
+| `--workers` | number of CPUs | Photos processed at once. |
+
+```
+$ wba compress 2024-10-paris --max-width 2048 --apply
+wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 1.1 MB
+1 file written, 10 MB saved.
 ```
 
 ## wba clean <dir>
