@@ -38,7 +38,12 @@ file, a banner per directory with its total, and the grand total.
 
 A line ending in "####### has a .pp3 but nothing in converted/" is a raw
 you opened in RawTherapee (the .pp3 holds your edits) but never exported.
-Look at it before --apply; keep it with --exclude IMG_1264.`,
+Look at it before --apply, or keep it with --exclude.
+
+--exclude takes a glob and keeps every raw whose name without extension
+matches it (--exclude IMG_1264, --exclude 'IMG_12*'), or whose path below
+<dir> has a directory matching it (--exclude '*marie*' keeps a whole
+shoot). Repeat the flag for several patterns; case does not matter.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
@@ -49,7 +54,8 @@ Look at it before --apply; keep it with --exclude IMG_1264.`,
 
 	f := cmd.Flags()
 	f.StringVar(&o.Pattern, "pattern", "*.rw2", "glob on the file name that marks a raw")
-	f.StringArrayVar(&o.Exclude, "exclude", nil, "glob on the stem to keep; repeatable")
+	f.StringArrayVar(&o.Exclude, "exclude", nil,
+		"glob on a raw's name without extension or on a directory of its path, to keep; repeatable")
 
 	return cmd
 }

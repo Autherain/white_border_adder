@@ -371,3 +371,36 @@ func TestPlanRawTherapeeLayout(t *testing.T) {
 		t.Fatalf("candidates = %v, want %v", paths, want)
 	}
 }
+
+func TestPlanExcludeDirectory(t *testing.T) {
+	tests := []struct {
+		name    string
+		exclude []string
+		want    []string
+	}{
+		{"by shoot directory", []string{"*luchon*"}, []string{}},
+		{"by stem", []string{"_1310726"}, []string{"2025/20250804_luchon/_1310752.RW2"}},
+		{"by path", []string{"20250804_luchon/_131075*"}, []string{"2025/20250804_luchon/_1310726.RW2"}},
+		{"no match", []string{"luchon"}, []string{"2025/20250804_luchon/_1310726.RW2", "2025/20250804_luchon/_1310752.RW2"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := newTree(t, rawTherapeeLayout)
+
+			got, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true, Exclude: tt.exclude})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			paths := []string{}
+			for _, c := range got {
+				paths = append(paths, c.Path)
+			}
+
+			if !reflect.DeepEqual(paths, tt.want) {
+				t.Fatalf("candidates = %v, want %v", paths, tt.want)
+			}
+		})
+	}
+}

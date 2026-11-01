@@ -73,9 +73,17 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate,
 		}
 	}
 
-	candidates, err := scanTree(ctx, fs, dir, o)
+	found, err := scanTree(ctx, fs, dir, o)
 	if err != nil {
 		return nil, err
+	}
+
+	candidates := []Candidate{}
+
+	for _, c := range found {
+		if !excluded(relative(dir, c.Path), o.Exclude) {
+			candidates = append(candidates, c)
+		}
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
@@ -211,7 +219,7 @@ func candidateFor(dir string, entry os.FileInfo, listing map[string]os.FileInfo,
 	}
 
 	stem := strings.TrimSuffix(name, path.Ext(name))
-	if isDeveloped(stem, developed) || excluded(stem, o.Exclude) {
+	if isDeveloped(stem, developed) {
 		return Candidate{}, false
 	}
 
@@ -258,10 +266,19 @@ func isDeveloped(stem string, converted []string) bool {
 	return false
 }
 
-func excluded(stem string, globs []string) bool {
+// excluded matches the globs against the raw's name without extension, against
+// each directory of its path below the argument, and against that whole path,
+// so "--exclude IMG_12*" keeps a photo and "--exclude *marie*" keeps a shoot.
+func excluded(rel string, globs []string) bool {
+	rel = strings.ToLower(filepath.ToSlash(rel))
+	stem := strings.TrimSuffix(rel, path.Ext(rel))
+	names := append(strings.Split(stem, "/"), stem)
+
 	for _, glob := range globs {
-		if ok, _ := path.Match(strings.ToLower(glob), stem); ok {
-			return true
+		for _, name := range names {
+			if ok, _ := path.Match(strings.ToLower(glob), name); ok {
+				return true
+			}
 		}
 	}
 

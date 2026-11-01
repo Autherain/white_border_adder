@@ -21,7 +21,7 @@ wba <verb> <dir> --apply    # verbs only print what they would do until you add 
 | **Raw** | A file at the root of a photo directory matching `--pattern` (default `*.rw2`, case-insensitive). |
 | **Stem** | The raw file name without its extension: `IMG_1264`. |
 | **Developed** | A raw is developed when any file in `converted/` has a name that starts with its stem, case-insensitively. `IMG_1264.jpg`, `IMG_1264_converted.jpg` and `IMG_1264-bw.tif` all develop `IMG_1264.RW2`. The extension does not matter. |
-| **Candidate** | A raw that is not developed and whose stem matches no `--exclude` glob. |
+| **Candidate** | A raw that is not developed and that no `--exclude` glob keeps, by its stem or by a directory of its path. |
 | **Sidecar** | The `<raw name>.pp3` file RawTherapee leaves next to the raw. A candidate's sidecar is deleted with it; the sidecar of a raw that is kept is kept. |
 
 ## How a verb runs
@@ -78,11 +78,11 @@ Deletes the raws of `<dir>` that RawTherapee never developed.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--pattern` | `*.rw2` | Glob on the file name that marks a raw. |
-| `--exclude` | none | Glob on the stem to keep. Repeatable: `--exclude 'IMG_12*' --exclude IMG_1300`. |
+| `--exclude` | none | Glob that keeps a raw when it matches its stem or any directory of its path below `<dir>`. Repeatable: `--exclude 'IMG_12*' --exclude IMG_1300 --exclude '*marie*'`. |
 
-Taking a photo out of the list is `--exclude <stem>` on the next run. There is
-no config file, no prompt and no trash directory: the dry-run default is the
-safety net.
+Taking a photo out of the list is `--exclude <stem>` on the next run, and a
+whole shoot is `--exclude '<directory>'`. There is no config file, no prompt
+and no trash directory: the dry-run default is the safety net.
 
 ### Worked example
 
