@@ -168,11 +168,15 @@ func (p *planner) existing(photoDir string) (map[string]bool, error) {
 	return names, nil
 }
 
+// legacyOut is where the script that preceded wba wrote its bordered copies;
+// those trees still exist and must not be bordered or compressed again.
+const legacyOut = "bordered_images"
+
 // skipDir keeps the walk out of hidden directories and of wba's own outputs,
 // so a second run never borders a bordered or compressed copy. RawTherapee's
 // converted/ is entered on purpose: that is where the exports to border live.
 func (p *planner) skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "compressed" || name == p.outBase()
+	return strings.HasPrefix(name, ".") || name == "compressed" || name == legacyOut || name == p.outBase()
 }
 
 func (p *planner) outBase() string {

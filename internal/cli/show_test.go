@@ -28,9 +28,9 @@ func TestShow(t *testing.T) {
 		{files: []string{"IMG_1271.RW2"}, size: 25_000_000},
 	}
 	twoDirs := []item{
-		{files: []string{"paris/IMG_1264.RW2", "paris/IMG_1264.RW2.pp3"}, size: 24_012_000},
-		{files: []string{"lyon/IMG_2000.RW2"}, size: 1_000_000},
-		{files: []string{"paris/IMG_1271.RW2"}, size: 25_000_000},
+		{dir: "paris", files: []string{"paris/IMG_1264.RW2", "paris/IMG_1264.RW2.pp3"}, size: 24_012_000},
+		{dir: "lyon", files: []string{"lyon/IMG_2000.RW2"}, size: 1_000_000},
+		{dir: "paris", files: []string{"paris/IMG_1271.RW2"}, size: 25_000_000},
 	}
 	noSizes := []item{{files: []string{"bordered/bordered_a.jpg"}}, {files: []string{"bordered/bordered_b.jpg"}}}
 	warned := []item{

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/evaneecloo/white_border_adder/internal/clean"
 	"github.com/evaneecloo/white_border_adder/internal/log"
@@ -68,7 +69,7 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 	items := make([]item, 0, len(candidates))
 
 	for _, c := range candidates {
-		it := item{files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize}
+		it := item{dir: rel(dir, filepath.Dir(c.Path)), files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize}
 
 		// A sidecar without an export means time was spent on this raw in
 		// RawTherapee; worth a look before it goes.

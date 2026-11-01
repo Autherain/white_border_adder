@@ -10,9 +10,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/spf13/afero"
-
 	"github.com/evaneecloo/white_border_adder/internal/log"
+	"github.com/spf13/afero"
 )
 
 func defaults() Options {
@@ -161,5 +160,45 @@ func TestPlanRejectsMissingOrFileArgument(t *testing.T) {
 
 	if _, err := Plan(context.Background(), fs, "photos/IMG_1.jpg", defaults()); err == nil {
 		t.Error("file argument: want error")
+	}
+}
+
+// rawTherapeeLayout is the owner's real tree: one directory per shoot, raws
+// and sidecars at its root, exports in converted/, and the outputs of wba and
+// of the script before it under converted/.
+var rawTherapeeLayout = map[string]string{
+	"2025/20250804_luchon/_1310721.RW2":                                    "raw",
+	"2025/20250804_luchon/_1310721.RW2.pp3":                                "sidecar",
+	"2025/20250804_luchon/_1310726.RW2":                                    "raw",
+	"2025/20250804_luchon/_1310752.RW2":                                    "raw",
+	"2025/20250804_luchon/converted/_1310721_converted.jpg":                "jpeg",
+	"2025/20250804_luchon/converted/bordered_images/bordered__1310721.jpg": "jpeg",
+	"2025/20250804_luchon/converted/bordered/bordered__1310721.jpg":        "jpeg",
+	"2025/20250804_luchon/converted/compressed/compressed__1310721.jpg":    "jpeg",
+	"2025/20250715_toulouse/_1300001.RW2":                                  "raw",
+	"2025/20251129_pot_depart1_gaspard/_1330976.JPG":                       "jpeg",
+	"2025/.stfolder/marker":                                                "",
+}
+
+func TestPlanRawTherapeeLayout(t *testing.T) {
+	fs := newTree(t, rawTherapeeLayout)
+
+	jobs, err := Plan(context.Background(), fs, "2025", Options{Prefix: "bordered_", Recursive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Job{
+		{
+			"2025/20250804_luchon/converted/_1310721_converted.jpg",
+			"2025/20250804_luchon/converted/bordered/bordered__1310721_converted.jpg",
+		},
+		{
+			"2025/20251129_pot_depart1_gaspard/_1330976.JPG",
+			"2025/20251129_pot_depart1_gaspard/bordered/bordered__1330976.JPG",
+		},
+	}
+	if !reflect.DeepEqual(jobs, want) {
+		t.Fatalf("jobs = %v, want %v", jobs, want)
 	}
 }

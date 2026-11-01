@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"path/filepath"
 	"runtime"
 
 	"github.com/evaneecloo/white_border_adder/internal/compress"
@@ -57,7 +58,7 @@ func (a *app) runCompress(ctx context.Context, dir string, o compress.Options, w
 
 	items := make([]item, 0, len(jobs))
 	for _, j := range jobs {
-		items = append(items, item{files: []string{rel(dir, j.Out)}, size: j.Size})
+		items = append(items, item{dir: rel(dir, filepath.Dir(j.In)), files: []string{rel(dir, j.Out)}, size: j.Size})
 	}
 
 	chosen := a.show(ctx, verbWrite, items)

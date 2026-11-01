@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/evaneecloo/white_border_adder/internal/log"
 )
@@ -16,6 +15,7 @@ const (
 // argument, the bytes involved, and a warning when the file deserves a
 // second look before --apply.
 type item struct {
+	dir   string // photo directory, relative to the argument; groups the banner
 	files []string
 	size  int64
 	warn  string
@@ -105,13 +105,11 @@ func byDirectory(items []item) []group {
 	index := map[string]int{}
 
 	for _, it := range items {
-		dir := filepath.Dir(it.files[0])
-
-		i, seen := index[dir]
+		i, seen := index[it.dir]
 		if !seen {
 			i = len(groups)
-			index[dir] = i
-			groups = append(groups, group{dir: dir})
+			index[it.dir] = i
+			groups = append(groups, group{dir: it.dir})
 		}
 
 		groups[i].items = append(groups[i].items, it)
