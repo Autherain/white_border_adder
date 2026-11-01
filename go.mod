@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.23.5
 
 require (
+	github.com/alitto/pond/v2 v2.7.3
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.22.0
