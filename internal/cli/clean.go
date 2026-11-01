@@ -14,7 +14,31 @@ func (a *app) cleanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clean <dir>",
 		Short: "Delete raws that RawTherapee never developed",
-		Args:  cobra.ExactArgs(1),
+		Long: `Delete the raws of <dir> that RawTherapee never developed.
+
+What gets deleted, step by step:
+
+  1. <dir> must contain a converted/ subdirectory, the folder RawTherapee
+     exports into. Without it nothing happens there: no converted/ means no
+     sorting was done. With --recursive every subdirectory is checked the
+     same way; those without converted/ are skipped.
+  2. A raw is a file at the root of that directory matching --pattern
+     (*.rw2 by default, any case). Raws in subdirectories or inside
+     converted/ are never touched.
+  3. A raw is developed when any file in converted/ starts with the raw's
+     name without extension: IMG_1264.RW2 is developed by IMG_1264.jpg,
+     IMG_1264_bw.tif or IMG_1264-2.png. The extension does not matter.
+  4. Every raw that is not developed is deleted, with its RawTherapee
+     sidecar (IMG_1264.RW2.pp3) when there is one. The sidecar of a raw
+     that stays, stays.
+
+Nothing is deleted without --apply: the default run prints one line per
+file, a banner per directory with its total, and the grand total.
+
+A line ending in "####### has a .pp3 but nothing in converted/" is a raw
+you opened in RawTherapee (the .pp3 holds your edits) but never exported.
+Look at it before --apply; keep it with --exclude IMG_1264.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
 
@@ -49,7 +73,7 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 		// A sidecar without an export means time was spent on this raw in
 		// RawTherapee; worth a look before it goes.
 		if c.Sidecar != "" {
-			it.warn = "edited, never exported"
+			it.warn = "has a .pp3 but nothing in converted/"
 		}
 
 		items = append(items, it)

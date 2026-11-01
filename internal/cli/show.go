@@ -28,26 +28,36 @@ func (a *app) show(ctx context.Context, verb string, items []item) []int {
 		return everything(len(items))
 	}
 
-	for _, it := range items {
-		for i, f := range it.files {
-			if i == 0 && it.warn != "" {
-				log.Infof(ctx, "%s %s  %s",
-					styleWould.Render("would "+verb), f, styleGone.Render(log.Banner+" "+it.warn))
+	groups := byDirectory(items)
 
-				continue
-			}
-
-			log.Infof(ctx, "%s %s", styleWould.Render("would "+verb), f)
+	for _, g := range groups {
+		// One directory needs no header; several get a banner each so the
+		// eye finds where a folder starts in a long list.
+		if len(groups) > 1 {
+			log.Infof(ctx, "%s", styleBold.Render(log.Banner+" "+g.dir+": "+summary(g.items)))
 		}
-	}
 
-	for _, sub := range subtotals(items) {
-		log.Infof(ctx, "%s: %s", sub.dir, summary(sub.items))
+		for _, it := range g.items {
+			showItem(ctx, verb, it)
+		}
 	}
 
 	log.Infof(ctx, "%s Re-run with --apply to %s them.", styleBold.Render(summary(items)+"."), verb)
 
 	return nil
+}
+
+func showItem(ctx context.Context, verb string, it item) {
+	for i, f := range it.files {
+		if i == 0 && it.warn != "" {
+			log.Infof(ctx, "%s %s  %s",
+				styleWould.Render("would "+verb), f, styleGone.Render(log.Banner+" "+it.warn))
+
+			continue
+		}
+
+		log.Infof(ctx, "%s %s", styleWould.Render("would "+verb), f)
+	}
 }
 
 func everything(n int) []int {
@@ -84,15 +94,14 @@ func summary(items []item) string {
 	return files(n) + ", " + human(total)
 }
 
-type subtotal struct {
+type group struct {
 	dir   string
 	items []item
 }
 
-// subtotals groups the items by directory, in order of appearance, so a
-// recursive run says what each folder weighs. One directory needs no detail.
-func subtotals(items []item) []subtotal {
-	groups := []subtotal{}
+// byDirectory splits the items by directory, in order of appearance.
+func byDirectory(items []item) []group {
+	groups := []group{}
 	index := map[string]int{}
 
 	for _, it := range items {
@@ -102,14 +111,10 @@ func subtotals(items []item) []subtotal {
 		if !seen {
 			i = len(groups)
 			index[dir] = i
-			groups = append(groups, subtotal{dir: dir})
+			groups = append(groups, group{dir: dir})
 		}
 
 		groups[i].items = append(groups[i].items, it)
-	}
-
-	if len(groups) <= 1 {
-		return nil
 	}
 
 	return groups

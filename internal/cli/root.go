@@ -27,8 +27,17 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 	a := &app{fs: fs, stdout: stdout, stderr: stderr}
 
 	root := &cobra.Command{
-		Use:           "wba",
-		Short:         "White borders, smaller copies and cleanup of undeveloped raws",
+		Use:   "wba",
+		Short: "White borders, smaller copies and cleanup of undeveloped raws",
+		Long: `wba works on a directory of photos, one verb at a time.
+
+Every verb is a dry run by default: it prints one "would ..." line per
+file and a total, and changes nothing. Add --apply to do it. Read the
+dry run first, especially before "clean", which deletes files.
+
+  wba clean <dir>             list the raws that would be deleted
+  wba clean <dir> --apply     delete them
+  wba clean --help            what "developed" and "candidate" mean`,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 			// Flags are parsed by now: a failure from here on is a runtime

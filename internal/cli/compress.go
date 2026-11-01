@@ -16,7 +16,17 @@ func (a *app) compressCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compress <dir>",
 		Short: "Write a smaller copy of every JPEG and PNG in <dir>",
-		Args:  cobra.ExactArgs(1),
+		Long: `Write a smaller copy of every JPEG and PNG at the root of <dir>.
+
+Each photo is downscaled to fit --max-width and --max-height (never
+upscaled), JPEGs re-encoded at --jpeg-quality, PNGs at the best
+compression level, and written as <dir>/compressed/compressed_<name>.
+The originals are never modified.
+
+At the default quality of 100 the saving comes from the size limit, so
+give one: a JPEG re-encoded at 100 with no limit can come out larger, and
+the total says so. Nothing is written without --apply.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
 

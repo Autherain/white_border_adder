@@ -34,7 +34,7 @@ func TestShow(t *testing.T) {
 	}
 	noSizes := []item{{files: []string{"bordered/bordered_a.jpg"}}, {files: []string{"bordered/bordered_b.jpg"}}}
 	warned := []item{
-		{files: []string{"IMG_1264.RW2", "IMG_1264.RW2.pp3"}, size: 24_012_000, warn: "edited, never exported"},
+		{files: []string{"IMG_1264.RW2", "IMG_1264.RW2.pp3"}, size: 24_012_000, warn: "has a .pp3 but nothing in converted/"},
 		{files: []string{"IMG_1271.RW2"}, size: 25_000_000},
 	}
 
@@ -48,17 +48,17 @@ func TestShow(t *testing.T) {
 			"would delete IMG_1264.RW2.pp3\n" +
 			"would delete IMG_1271.RW2\n" +
 			"3 files, 49 MB. Re-run with --apply to delete them.\n"},
-		{"subtotals per directory", verbDelete, twoDirs, "would delete paris/IMG_1264.RW2\n" +
+		{"banner per directory", verbDelete, twoDirs, "####### paris: 3 files, 49 MB\n" +
+			"would delete paris/IMG_1264.RW2\n" +
 			"would delete paris/IMG_1264.RW2.pp3\n" +
-			"would delete lyon/IMG_2000.RW2\n" +
 			"would delete paris/IMG_1271.RW2\n" +
-			"paris: 3 files, 49 MB\n" +
-			"lyon: 1 file, 1.0 MB\n" +
+			"####### lyon: 1 file, 1.0 MB\n" +
+			"would delete lyon/IMG_2000.RW2\n" +
 			"4 files, 50 MB. Re-run with --apply to delete them.\n"},
 		{"no sizes", verbWrite, noSizes, "would write bordered/bordered_a.jpg\n" +
 			"would write bordered/bordered_b.jpg\n" +
 			"2 files. Re-run with --apply to write them.\n"},
-		{"warning banner", verbDelete, warned, "would delete IMG_1264.RW2  ####### edited, never exported\n" +
+		{"warning banner", verbDelete, warned, "would delete IMG_1264.RW2  ####### has a .pp3 but nothing in converted/\n" +
 			"would delete IMG_1264.RW2.pp3\n" +
 			"would delete IMG_1271.RW2\n" +
 			"3 files, 49 MB. Re-run with --apply to delete them.\n"},

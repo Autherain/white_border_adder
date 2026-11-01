@@ -28,9 +28,16 @@ wba <verb> <dir> --apply    # verbs only print what they would do until you add 
 ## How a verb runs
 
 Every verb plans first and prints the plan, one `would ...` line per file,
-then the total. With `--recursive` a subtotal per directory comes before it.
-Nothing is written or deleted until you add `--apply`, which does the whole
-plan and prints the same lines in the past tense.
+then the total. With `--recursive` each directory opens with a
+`####### <dir>: <count>, <size>` banner. Nothing is written or deleted
+until you add `--apply`, which does the whole plan and prints the same
+lines in the past tense. Errors are printed with the same `#######`
+banner on stderr.
+
+`clean` marks a raw that has a `.pp3` sidecar but nothing in `converted/`
+with `####### has a .pp3 but nothing in converted/`: you edited it in
+RawTherapee and never exported it. Look before you `--apply`, or keep it
+with `--exclude <stem>`.
 
 | Flag | Default | Meaning |
 |---|---|---|

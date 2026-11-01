@@ -26,7 +26,16 @@ func (a *app) borderCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "border <dir>",
 		Short: "Write a white-bordered copy of every JPEG and PNG in <dir>",
-		Args:  cobra.ExactArgs(1),
+		Long: `Write a white-bordered copy of every JPEG and PNG at the root of <dir>.
+
+Each photo is scaled to fit inside a white 1080x1080 canvas (Instagram's
+square) minus the border ratios, centred, and written as
+<dir>/bordered/bordered_<name>. Landscape and portrait photos get their
+own ratios. The originals are never modified.
+
+An output file that already exists is skipped unless --force. Nothing is
+written without --apply.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
 
