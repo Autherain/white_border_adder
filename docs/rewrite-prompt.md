@@ -23,8 +23,8 @@ one worked example with real input and real output).
 go.mod                       module github.com/evaneecloo/white_border_adder, go 1.23
 cmd/wba/main.go              cobra root + Execute, nothing else
 internal/cli/                root command, shared flags (--apply, --recursive, --verbose)
-internal/border/             port of golang/main.go, package API: Plan(dir, Options) ([]Job, error); Job.Run()
-internal/clean/              new: Plan(dir, Options) ([]Candidate, error); Candidate.Delete()
+internal/border/             port of golang/main.go, package API: Plan(fs, dir, Options) ([]Job, error); Job.Run(fs)
+internal/clean/              new: Plan(fs, dir, Options) ([]Candidate, error); Candidate.Delete(fs)
 docs/                        this file, later docs/decisions/<topic>.md if a choice needs a paragraph
 Makefile                     lint, test, build (current OS only; no cross-compile targets)
 .golangci.yml                sauron's file minus forbidigo and depguard rules
@@ -36,6 +36,16 @@ Delete `golang/` once ported. `rust/` and `build/` are already gone. Keep the
 two sample JPEGs at the root, the README showcase uses them.
 
 Binary name is `wba`. Commands: `wba border`, `wba clean`, `wba version`.
+
+## Filesystem
+
+Every package under `internal/` reads and writes through an `afero.Fs`
+(`github.com/spf13/afero`, same author as cobra), passed as the first
+argument. `cmd/wba` is the only place that creates `afero.NewOsFs()`. No
+`os.ReadDir`, `os.Remove`, `os.Create` or `filepath.WalkDir` outside
+`cmd/`; use `afero.ReadDir`, `fs.Remove`, `fs.Create`, `afero.Walk`.
+`testing/fstest.MapFS` is read-only, which is why it is not the choice:
+`clean` tests must assert a deletion.
 
 ## Shared behaviour
 
@@ -138,10 +148,24 @@ Safety rules to test, not to comment:
 
 ## Tests
 
-`go test ./...` with `t.TempDir()` fixtures: a photo directory with three
-raws, one developed under `converted/IMG_1264.jpg`, one with a sidecar, one
-excluded. Assert the exact candidate list and that dry-run leaves the tree
-unchanged. For `border`, one table test on the scale/offset math with
+`go test ./...` on `afero.NewMemMapFs()`, never on disk. A test helper
+`newTree(t, map[string]string)` builds the fixture from a path-to-content
+map, so a fixture reads as the tree it describes:
+
+```go
+fs := newTree(t, map[string]string{
+	"2024-10-paris/IMG_1264.RW2":           "raw",
+	"2024-10-paris/IMG_1264.RW2.pp3":       "sidecar",
+	"2024-10-paris/IMG_1271.RW2":           "raw",
+	"2024-10-paris/converted/IMG_1264.jpg": "jpeg",
+	"2024-11-lyon/IMG_2000.RW2":            "raw",   // no converted/: skipped
+})
+```
+
+Table tests over such trees for `clean`: developed, undeveloped, sidecar,
+excluded, no `converted/`, raw inside `converted/`, recursive. Assert the
+exact candidate list, that dry-run leaves the tree unchanged (walk and
+compare the path set) and that `--apply` removes exactly the candidates. For `border`, one table test on the scale/offset math with
 landscape and portrait inputs; no image decoding in tests.
 
 ## README
