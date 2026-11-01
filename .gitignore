@@ -48,3 +48,4 @@ build/**
 
 # Build output
 /wba
+/wba.exe
