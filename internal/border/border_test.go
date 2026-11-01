@@ -174,7 +174,6 @@ var rawTherapeeLayout = map[string]string{
 	"2025/20250804_luchon/converted/_1310721_converted.jpg":                "jpeg",
 	"2025/20250804_luchon/converted/bordered_images/bordered__1310721.jpg": "jpeg",
 	"2025/20250804_luchon/converted/bordered/bordered__1310721.jpg":        "jpeg",
-	"2025/20250804_luchon/converted/compressed/compressed__1310721.jpg":    "jpeg",
 	"2025/20250715_toulouse/_1300001.RW2":                                  "raw",
 	"2025/20251129_pot_depart1_gaspard/_1330976.JPG":                       "jpeg",
 	"2025/.stfolder/marker":                                                "",

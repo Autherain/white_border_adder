@@ -1,11 +1,10 @@
 # wba
 
-`wba` adds white borders to photos so they fit Instagram, shrinks them for
-sharing, and deletes the Panasonic raws that RawTherapee never developed.
+`wba` adds white borders to photos so they fit Instagram, and deletes the
+Panasonic raws that RawTherapee never developed.
 
 ```
 wba border <dir>            # write <dir>/bordered/bordered_<name>.jpg for every JPEG and PNG
-wba compress <dir>          # write <dir>/compressed/compressed_<name>.jpg, smaller
 wba clean <dir>             # delete raws without a developed copy in <dir>/converted/
 wba <verb> <dir> --apply    # verbs only print what they would do until you add --apply
 ```
@@ -42,7 +41,7 @@ with `--exclude <stem>`.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--apply` | false | Do it. Without this flag a verb only prints what it would do. |
-| `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories. `clean` also skips `converted/`, which holds no raws; `border` and `compress` enter it, since that is where the exports are, and skip only their own `bordered/` and `compressed/`. |
+| `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories. `clean` also skips `converted/`, which holds no raws; `border` enters it, since that is where the exports are, and skips only its own `bordered/`. |
 | `--verbose` | false | Also print skipped items and why. |
 
 A file that fails is printed on stderr with its error, the verb goes on, and
@@ -70,48 +69,6 @@ $ wba border 2024-10-paris
 would write bordered/bordered_IMG_1264.jpg
 would write bordered/bordered_IMG_1271.jpg
 2 files. Re-run with --apply to write them.
-```
-
-## wba compress <dir>
-
-Writes a smaller copy of every `.jpg`, `.jpeg` and `.png` at the root of
-`<dir>`: JPEGs re-encoded at `--jpeg-quality`, PNGs at the best
-compression level, same pixel size. The only lever is the quality. At 100
-a JPEG usually comes out larger than the original, and the total says so;
-85 is where the loss stops being visible on a screen.
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--jpeg-quality` | 100 | JPEG output quality. |
-| `--prefix` | `compressed_` | Prefix of the output file name. |
-| `--out` | `<dir>/compressed` | Output directory. Relative to each photo directory with `--recursive`. |
-| `--force` | false | Overwrite an output file that already exists; otherwise it is skipped. |
-| `--workers` | number of CPUs | Photos processed at once. |
-
-The dry run really encodes 5 photos spread across the list, in memory, and
-scales their ratio up to the whole plan, so you know what you gain before
-`--apply`:
-
-```
-$ wba compress 2025 --recursive --jpeg-quality 85
-...
-estimate: 6.2 GB -> 2.2 GB, 63% smaller, measured on 5 of 591 photos
-591 files, 6.2 GB. Re-run with --apply to write them.
-```
-
-`--verbose` prints the five measurements. Measured on the sample photo of
-this repository:
-
-| `--jpeg-quality` | Output | Result |
-|---|---|---|
-| 100 | 13 MB | 1.1 MB larger |
-| 95 | 7.4 MB | 4.2 MB saved |
-| 85 | 3.8 MB | 7.7 MB saved |
-
-```
-$ wba compress 2024-10-paris --jpeg-quality 85 --apply
-wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 3.8 MB
-1 file written, 7.7 MB saved.
 ```
 
 ## wba clean <dir>
@@ -193,7 +150,6 @@ from the latest GitHub release.
 wba clean .             # read the list, nothing is deleted
 wba clean . --apply     # delete it
 wba border . --apply
-wba compress . --jpeg-quality 85 --apply
 ```
 
 Paths work with either slash: `wba clean D:\photos\2024-10-paris` and

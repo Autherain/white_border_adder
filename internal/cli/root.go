@@ -28,7 +28,7 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 
 	root := &cobra.Command{
 		Use:   "wba",
-		Short: "White borders, smaller copies and cleanup of undeveloped raws",
+		Short: "White borders for Instagram and cleanup of undeveloped raws",
 		Long: `wba works on a directory of photos, one verb at a time.
 
 Every verb is a dry run by default: it prints one "would ..." line per
@@ -60,7 +60,7 @@ dry run first, especially before "clean", which deletes files.
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
-	root.AddCommand(a.borderCmd(), a.cleanCmd(), a.compressCmd(), versionCmd())
+	root.AddCommand(a.borderCmd(), a.cleanCmd(), versionCmd())
 
 	return root
 }
