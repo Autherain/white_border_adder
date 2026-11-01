@@ -63,12 +63,15 @@ would write bordered/bordered_IMG_1271.jpg
 ## wba compress <dir>
 
 Writes a smaller copy of every `.jpg`, `.jpeg` and `.png` at the root of
-`<dir>`: JPEGs re-encoded at a lower quality, PNGs at the best compression
-level, both optionally downscaled. Photos are never upscaled.
+`<dir>`: downscaled to fit `--max-width` and `--max-height`, JPEGs
+re-encoded at `--jpeg-quality`, PNGs at the best compression level. Photos
+are never upscaled. At the default quality the saving comes from the size
+limit, so give one; a JPEG re-encoded at quality 100 with no limit can come
+out larger than the original, and the total says so.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--jpeg-quality` | 85 | JPEG output quality. |
+| `--jpeg-quality` | 100 | JPEG output quality. |
 | `--max-width`, `--max-height` | 0 | Downscale to fit inside, keeping the ratio. 0 keeps the size. |
 | `--prefix` | `compressed_` | Prefix of the output file name. |
 | `--out` | `<dir>/compressed` | Output directory. Relative to each photo directory with `--recursive`. |
@@ -77,8 +80,8 @@ level, both optionally downscaled. Photos are never upscaled.
 
 ```
 $ wba compress 2024-10-paris --max-width 2048 --apply
-wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 1.1 MB
-1 file written, 10 MB saved.
+wrote compressed/compressed_IMG_1264.jpg, 12 MB -> 4.0 MB
+1 file written, 7.5 MB saved.
 ```
 
 ## wba clean <dir>

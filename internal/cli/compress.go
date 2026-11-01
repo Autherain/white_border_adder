@@ -7,10 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// 85 is where JPEG artefacts stop being visible on a phone screen while the
-// file drops to a fraction of the camera's quality-100 output.
-const defaultCompressQuality = 85
-
 func (a *app) compressCmd() *cobra.Command {
 	o := compress.Options{}
 	workers := 0
@@ -28,7 +24,7 @@ func (a *app) compressCmd() *cobra.Command {
 	}
 
 	f := cmd.Flags()
-	f.IntVar(&o.JPEGQuality, "jpeg-quality", defaultCompressQuality, "JPEG output quality, 1-100")
+	f.IntVar(&o.JPEGQuality, "jpeg-quality", defaultJPEGQuality, "JPEG output quality, 1-100")
 	f.IntVar(&o.MaxWidth, "max-width", 0, "downscale to fit this width; 0 keeps the size")
 	f.IntVar(&o.MaxHeight, "max-height", 0, "downscale to fit this height; 0 keeps the size")
 	f.StringVar(&o.Prefix, "prefix", "compressed_", "prefix of the output file name")
@@ -62,7 +58,14 @@ func (a *app) runCompress(dir string, o compress.Options, workers int) error {
 	}
 
 	failed, saved := a.compressAll(dir, jobs, o, workers)
-	a.out("%s written, %s saved.", files(len(jobs)-failed), human(saved))
+
+	// Quality 100 without a size limit can grow a JPEG; say so instead of
+	// printing a negative saving.
+	if saved < 0 {
+		a.out("%s written, %s larger.", files(len(jobs)-failed), human(-saved))
+	} else {
+		a.out("%s written, %s saved.", files(len(jobs)-failed), human(saved))
+	}
 
 	return failures(failed)
 }
