@@ -42,7 +42,7 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
-	root.AddCommand(a.borderCmd(), versionCmd())
+	root.AddCommand(a.borderCmd(), a.cleanCmd(), versionCmd())
 
 	return root
 }
