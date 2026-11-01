@@ -1,96 +1,193 @@
-# white_border_adder
+# wba
 
-Lil' project to add white border onto photos ٩(^ᗜ^ )و ´-
+`wba` adds white borders to photos so they fit Instagram, and deletes the
+Panasonic raws that RawTherapee never developed.
 
-I was frustrated to have no reliable and easy solution to add white borders to my photos to post them onto instagram.
+```
+wba border <dir>            # write <dir>/bordered/bordered_<name>.jpg for every JPEG and PNG
+wba clean <dir>             # delete raws without a developed copy in <dir>/converted/
+wba <verb> <dir> --apply    # verbs only print what they would do until you add --apply
+```
 
-## Features
-
-- 🖼️ Bulk processing of images (JPG, JPEG, PNG)
-- ⚡ Concurrent processing with configurable worker pool
-- 🎯 Smart border sizing for both landscape and portrait orientations
-- 📊 Detailed processing statistics and progress tracking
-- 💪 Maintains aspect ratio while fitting to target dimensions
-- 📁 Option to create a separate output folder
-- ⚙️ Highly configurable through command-line flags
-
-
-## Project Preview
-
-|              Original               |                 With Borders                 |
+|              Original               |                 With borders                 |
 | :---------------------------------: | :------------------------------------------: |
 | ![Original](IMG_1264_converted.jpg) | ![Bordered](bordered_IMG_1264_converted.jpg) |
 
-## Quick Start
+## Vocabulary
 
-```bash
-# Basic usage with default settings
-go run main.go /path/to/your/photos
+| Term | Meaning |
+|---|---|
+| **Photo directory** | A directory that contains a `converted/` subdirectory, which is where RawTherapee writes developed photos. `clean` never touches a directory without one: no `converted/` means no sorting happened there, so nothing is a candidate. |
+| **Raw** | A file at the root of a photo directory matching `--pattern` (default `*.rw2`, case-insensitive). |
+| **Stem** | The raw file name without its extension: `IMG_1264`. |
+| **Developed** | A raw is developed when any file in `converted/` has a name that starts with its stem, case-insensitively. `IMG_1264.jpg`, `IMG_1264_converted.jpg` and `IMG_1264-bw.tif` all develop `IMG_1264.RW2`. The extension does not matter. |
+| **Candidate** | A raw that is not developed and that no `--exclude` glob keeps, by its stem or by a directory of its path. |
+| **Sidecar** | The `<raw name>.pp3` file RawTherapee leaves next to the raw. A candidate's sidecar is deleted with it; the sidecar of a raw that is kept is kept. |
 
-# Or build and run
-go build
-./white_border_adder /path/to/your/photos
+## How a verb runs
+
+Every verb plans first and prints the plan, one `would ...` line per file.
+With `--recursive` each directory opens with a `####### <dir>: <count>,
+<size>` banner. The plan ends with a recap: one line per directory saying
+what goes and what `--exclude` keeps, with sizes, then the totals.
+
+```
+####### recap
+delete  20260620_toulouse       64 files, 633 MB
+keep    20260701_portait_marie  21 files, 317 MB  --exclude *marie*
+delete  20260810_suisse         14 files, 156 MB
+keep    20260810_suisse         99 files, 1.8 GB  --exclude _13409*
+####### 71 files flagged: has a .pp3 but nothing in converted/
+182 files, 2.2 GB, 169 files, 2.9 GB kept. Re-run with --apply to delete them.
 ```
 
-## Configuration Options
+Nothing is written or deleted until you add `--apply`, which does the
+plan, prints the same lines in the past tense and the same recap. Errors
+are printed with the `#######` banner on stderr.
 
-All parameters can be customized using command-line flags:
+`clean` marks a raw that has a `.pp3` sidecar but nothing in `converted/`
+with `####### has a .pp3 but nothing in converted/`: you edited it in
+RawTherapee and never exported it. Look before you `--apply`, or keep it
+with `--exclude <stem>`.
 
-| Flag               | Default      | Description                                       |
-| ------------------ | ------------ | ------------------------------------------------- |
-| `-width`           | 1080         | Target width for output images                    |
-| `-height`          | 1080         | Target height for output images                   |
-| `-landscape-vert`  | 0.05         | Vertical border ratio for landscape images (5%)   |
-| `-landscape-horiz` | 0.03         | Horizontal border ratio for landscape images (3%) |
-| `-portrait-vert`   | 0.005        | Vertical border ratio for portrait images (0.5%)  |
-| `-portrait-horiz`  | 0.18         | Horizontal border ratio for portrait images (18%) |
-| `-batch-size`      | 10           | Number of images to process in each batch         |
-| `-workers`         | 1000         | Maximum number of concurrent workers              |
-| `-jpeg-quality`    | 100          | JPEG output quality (1-100)                       |
-| `-prefix`          | "bordered\_" | Prefix for output filenames                       |
-| `-separate-folder` | true         | Create separate folder for output                 |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--apply` | false | Do it. Without this flag a verb only prints what it would do. |
+| `--recursive` | false | Walk the tree below `<dir>`, skipping dot-directories. `clean` also skips `converted/`, which holds no raws; `border` enters it, since that is where the exports are, and skips only its own `bordered/`. |
+| `--verbose` | false | Also print skipped items and why. |
 
-## Advanced Usage Examples
+A file that fails is printed on stderr with its error, the verb goes on, and
+the exit code is 1 at the end. A verb with nothing to do prints `nothing to
+do` and exits 0.
 
-```bash
-# Custom dimensions and borders
-./white_border_adder -width 1200 -height 1200 -landscape-vert 0.1 -landscape-horiz 0.05 /path/to/photos
+## wba border <dir>
 
-# High-performance processing
-./white_border_adder -batch-size 20 -workers 2000 /path/to/photos
+Writes a copy of every `.jpg`, `.jpeg` and `.png` at the root of `<dir>` on
+a white canvas, centred, scaled to leave the border ratios below.
 
-# Custom output settings
-./white_border_adder -prefix "insta_" -separate-folder=false -jpeg-quality 95 /path/to/photos
+| Flag | Default | Meaning |
+|---|---|---|
+| `--width`, `--height` | 1080 | Canvas size in pixels. |
+| `--landscape-vert`, `--landscape-horiz` | 0.05, 0.03 | Border ratios for landscape photos, as a fraction of the canvas. |
+| `--portrait-vert`, `--portrait-horiz` | 0.005, 0.18 | Border ratios for portrait photos. |
+| `--jpeg-quality` | 100 | JPEG output quality. PNG in gives PNG out. |
+| `--prefix` | `bordered_` | Prefix of the output file name. |
+| `--out` | `<dir>/bordered` | Output directory. Relative to each photo directory with `--recursive`. |
+| `--force` | false | Overwrite an output file that already exists; otherwise it is skipped. |
+| `--workers` | number of CPUs | Photos processed at once. |
+
+```
+$ wba border 2024-10-paris
+would write bordered/bordered_IMG_1264.jpg
+would write bordered/bordered_IMG_1271.jpg
+2 files. Re-run with --apply to write them.
 ```
 
-## Output
+## wba clean <dir>
 
-- Processed images are saved with the configured prefix (default: "bordered\_")
-- By default, outputs are saved in a new "bordered_images" subdirectory
-- Progress and statistics are displayed in real-time:
-  - ✅ Successfully processed images
-  - ❌ Failed images (if any)
-  - ⏱️ Processing times
-  - 📊 Batch statistics
+Deletes the raws of `<dir>` that RawTherapee never developed.
 
-## Performance Tips
+| Flag | Default | Meaning |
+|---|---|---|
+| `--pattern` | `*.rw2` | Glob on the file name that marks a raw. |
+| `--exclude` | none | Glob that keeps a raw when it matches its stem or any directory of its path below `<dir>`. Repeatable: `--exclude 'IMG_12*' --exclude IMG_1300 --exclude '*marie*'`. |
+| `--only` | none | The mirror: when given, only the raws matching one of its globs go, the rest is kept. `--only '*suisse*'` cleans one shoot out of a year. `--exclude` wins when both match. |
 
-1. Adjust `-batch-size` based on your system's memory
-2. Tune `-workers` based on your CPU cores
-3. Lower `-jpeg-quality` for faster processing if needed
-4. Use the default separate folder option for better organization
+Taking a photo out of the list is `--exclude <stem>` on the next run, a
+whole shoot is `--exclude '<directory>'`, and cleaning one shoot only is
+`--only '<directory>'`. There is no config file, no prompt and no trash
+directory: the dry-run default is the safety net.
 
-## Requirements
+### Worked example
 
-- Go 1.21 or later
-- No external dependencies beyond the Go standard library and x/image
+Before:
 
-## Known Limitations
+```
+2024-10-paris/
+├── IMG_1264.RW2
+├── IMG_1264.RW2.pp3
+├── IMG_1271.RW2
+├── IMG_1280.RW2
+├── IMG_1280.RW2.pp3
+└── converted/
+    └── IMG_1280.jpg
+```
 
-- Only processes JPG, JPEG, and PNG files
-- RAM usage scales with batch size and number of workers
-- Very large images might require adjusting batch size
+```
+$ wba clean 2024-10-paris
+would delete IMG_1264.RW2
+would delete IMG_1264.RW2.pp3
+would delete IMG_1271.RW2
+3 files, 49 MB. Re-run with --apply to delete them.
 
-## License
+$ wba clean 2024-10-paris --apply
+deleted IMG_1264.RW2
+deleted IMG_1264.RW2.pp3
+deleted IMG_1271.RW2
+3 files deleted, 49 MB freed.
+```
 
-This project is open source and available under the MIT License.
+After:
+
+```
+2024-10-paris/
+├── IMG_1280.RW2
+├── IMG_1280.RW2.pp3
+└── converted/
+    └── IMG_1280.jpg
+```
+
+`IMG_1280.RW2` stays because `converted/IMG_1280.jpg` starts with its stem,
+and its sidecar stays with it.
+
+## Install
+
+With Go installed, on any OS:
+
+```
+go install github.com/evaneecloo/white_border_adder/cmd/wba@latest
+```
+
+Or take `wba-windows-amd64.exe`, `wba-linux-amd64` or `wba-darwin-arm64`
+from the latest GitHub release.
+
+### Windows
+
+1. Download `wba-windows-amd64.exe` from the release page, rename it to
+   `wba.exe` and put it in a folder on your `PATH`, for example
+   `C:\Users\<you>\bin`. To add that folder to `PATH`, open
+   *Edit the system environment variables* and append it to the user `Path`.
+2. Open PowerShell or Windows Terminal in the photo directory (Shift +
+   right click, *Open PowerShell window here*) and run the verbs on `.`:
+
+```
+wba clean .             # read the list, nothing is deleted
+wba clean . --apply     # delete it
+wba border . --apply
+```
+
+Paths work with either slash: `wba clean D:\photos\2024-10-paris` and
+`wba clean D:/photos/2024-10-paris` are the same.
+
+### From source
+
+```
+make build            # ./wba for the current OS
+make build-windows    # ./wba.exe, from Linux or macOS
+make install          # ~/.local/bin/wba plus zsh and bash completion files
+make test
+make lint             # needs golangci-lint v2
+```
+
+### Shell completion
+
+`wba completion zsh`, `bash`, `fish` or `powershell` prints the script.
+`make install` writes the zsh and bash ones next to the binary under
+`~/.local/share`; for zsh, `~/.local/share/zsh/site-functions` must be in
+`fpath` before `compinit`. Since the binary generates the script, a new
+build followed by `make install` is all it takes after a change. For
+PowerShell on Windows, add to your `$PROFILE`:
+
+```
+wba completion powershell | Out-String | Invoke-Expression
+```

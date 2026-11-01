@@ -45,3 +45,7 @@ target
 #.idea/
 
 build/**
+
+# Build output
+/wba
+/wba.exe
