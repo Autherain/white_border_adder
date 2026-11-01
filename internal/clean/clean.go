@@ -31,6 +31,9 @@ type Candidate struct {
 	Size        int64
 	Sidecar     string
 	SidecarSize int64
+	// KeptBy is the --exclude glob that keeps this candidate, "" when it goes.
+	// Kept candidates stay in the plan so the caller can say what was spared.
+	KeptBy string
 }
 
 // Files lists the paths Delete would remove: the raw, then the sidecar when present.
@@ -78,12 +81,10 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate,
 		return nil, err
 	}
 
-	candidates := []Candidate{}
+	candidates := found
 
-	for _, c := range found {
-		if !excluded(relative(dir, c.Path), o.Exclude) {
-			candidates = append(candidates, c)
-		}
+	for i := range candidates {
+		candidates[i].KeptBy = excluded(relative(dir, candidates[i].Path), o.Exclude)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
@@ -266,10 +267,10 @@ func isDeveloped(stem string, converted []string) bool {
 	return false
 }
 
-// excluded matches the globs against the raw's name without extension, against
-// each directory of its path below the argument, and against that whole path,
-// so "--exclude IMG_12*" keeps a photo and "--exclude *marie*" keeps a shoot.
-func excluded(rel string, globs []string) bool {
+// excluded returns the first glob matching the raw's name without extension,
+// a directory of its path below the argument, or that whole path, so
+// "--exclude IMG_12*" keeps a photo and "--exclude *marie*" keeps a shoot.
+func excluded(rel string, globs []string) string {
 	rel = strings.ToLower(filepath.ToSlash(rel))
 	stem := strings.TrimSuffix(rel, path.Ext(rel))
 	names := append(strings.Split(stem, "/"), stem)
@@ -277,12 +278,12 @@ func excluded(rel string, globs []string) bool {
 	for _, glob := range globs {
 		for _, name := range names {
 			if ok, _ := path.Match(strings.ToLower(glob), name); ok {
-				return true
+				return glob
 			}
 		}
 	}
 
-	return false
+	return ""
 }
 
 func relative(root, p string) string {

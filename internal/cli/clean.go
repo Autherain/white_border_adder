@@ -75,7 +75,12 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 	items := make([]item, 0, len(candidates))
 
 	for _, c := range candidates {
-		it := item{dir: rel(dir, filepath.Dir(c.Path)), files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize}
+		it := item{
+			dir:   rel(dir, filepath.Dir(c.Path)),
+			files: relAll(dir, c.Files()),
+			size:  c.Size + c.SidecarSize,
+			kept:  c.KeptBy,
+		}
 
 		// A sidecar without an export means time was spent on this raw in
 		// RawTherapee; worth a look before it goes.
@@ -91,21 +96,19 @@ func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
 		return nil
 	}
 
-	failed, done := a.deleteAll(ctx, dir, pickFrom(candidates, chosen))
-	log.Infof(ctx, "%s", styleBold.Render(files(done.count)+" deleted, "+human(done.bytes)+" freed."))
+	failed := a.deleteAll(ctx, dir, pickFrom(candidates, chosen))
+
+	for _, line := range recap(verbDelete, items, finished) {
+		log.Infof(ctx, "%s", line)
+	}
 
 	return failures(failed)
 }
 
-type tally struct {
-	count int
-	bytes int64
-}
-
-// deleteAll removes the candidates one by one and tallies what actually went,
-// so a failure in the middle does not inflate the freed total.
-func (a *app) deleteAll(ctx context.Context, dir string, candidates []clean.Candidate) (int, tally) {
-	failed, done := 0, tally{}
+// deleteAll removes the candidates one by one; a failure is reported and
+// counted, the rest goes on.
+func (a *app) deleteAll(ctx context.Context, dir string, candidates []clean.Candidate) int {
+	failed := 0
 
 	for _, c := range candidates {
 		if err := c.Delete(a.fs); err != nil {
@@ -119,12 +122,9 @@ func (a *app) deleteAll(ctx context.Context, dir string, candidates []clean.Cand
 		for _, p := range c.Files() {
 			log.Infof(ctx, "%s %s", styleGone.Render("deleted"), rel(dir, p))
 		}
-
-		done.count += len(c.Files())
-		done.bytes += c.Size + c.SidecarSize
 	}
 
-	return failed, done
+	return failed
 }
 
 func relAll(dir string, paths []string) []string {

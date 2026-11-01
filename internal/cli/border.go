@@ -84,9 +84,11 @@ func (a *app) runBorder(ctx context.Context, dir string, o border.Options, worke
 		return nil
 	}
 
-	picked := pickFrom(jobs, chosen)
-	failed := a.writeAll(ctx, dir, picked, o, workers)
-	log.Infof(ctx, "%s", styleBold.Render(files(len(picked)-failed)+" written."))
+	failed := a.writeAll(ctx, dir, pickFrom(jobs, chosen), o, workers)
+
+	for _, line := range recap(verbWrite, items, finished) {
+		log.Infof(ctx, "%s", line)
+	}
 
 	return failures(failed)
 }

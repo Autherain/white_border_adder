@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -214,10 +215,12 @@ func TestPlan(t *testing.T) {
 			fs := newTree(t, tt.tree)
 			before := paths(t, fs)
 
-			got, err := Plan(context.Background(), fs, tt.dir, tt.opts)
+			all, err := Plan(context.Background(), fs, tt.dir, tt.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			got := toDelete(all)
 
 			if gotPaths := candidatePaths(got); !reflect.DeepEqual(gotPaths, tt.want) {
 				t.Fatalf("candidates = %v, want %v", gotPaths, tt.want)
@@ -353,10 +356,12 @@ var rawTherapeeLayout = map[string]string{
 func TestPlanRawTherapeeLayout(t *testing.T) {
 	fs := newTree(t, rawTherapeeLayout)
 
-	got, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true})
+	all, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true})
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	got := toDelete(all)
 
 	// _1310721 is developed, 20250715_toulouse has no converted/, the JPEG
 	// shoot has no raws: only the two undeveloped Luchon raws remain.
@@ -388,14 +393,25 @@ func TestPlanExcludeDirectory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := newTree(t, rawTherapeeLayout)
 
-			got, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true, Exclude: tt.exclude})
+			all, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true, Exclude: tt.exclude})
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			paths := []string{}
-			for _, c := range got {
+			for _, c := range toDelete(all) {
 				paths = append(paths, c.Path)
+			}
+
+			// Kept candidates stay in the plan, marked with the glob that kept them.
+			for _, c := range all {
+				if c.KeptBy == "" {
+					continue
+				}
+
+				if !slices.Contains(tt.exclude, c.KeptBy) {
+					t.Errorf("%s kept by %q, not one of %v", c.Path, c.KeptBy, tt.exclude)
+				}
 			}
 
 			if !reflect.DeepEqual(paths, tt.want) {
@@ -403,4 +419,16 @@ func TestPlanExcludeDirectory(t *testing.T) {
 			}
 		})
 	}
+}
+
+func toDelete(all []Candidate) []Candidate {
+	out := []Candidate{}
+
+	for _, c := range all {
+		if c.KeptBy == "" {
+			out = append(out, c)
+		}
+	}
+
+	return out
 }
