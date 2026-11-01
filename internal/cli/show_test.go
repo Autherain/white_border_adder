@@ -81,6 +81,21 @@ func TestShow(t *testing.T) {
 	}
 }
 
+func TestShowNotes(t *testing.T) {
+	t.Parallel()
+
+	a, ctx, out := testApp(false)
+	a.show(ctx, verbWrite, []item{{dir: ".", files: []string{"compressed/a.jpg"}, size: 10_000_000}},
+		"estimate: 10 MB -> 3.8 MB, 62% smaller, measured on 1 of 1 photos")
+
+	want := "would write compressed/a.jpg\n" +
+		"estimate: 10 MB -> 3.8 MB, 62% smaller, measured on 1 of 1 photos\n" +
+		"1 file, 10 MB. Re-run with --apply to write them.\n"
+	if out.String() != want {
+		t.Fatalf("output:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
 func TestShowApply(t *testing.T) {
 	t.Parallel()
 
@@ -89,5 +104,19 @@ func TestShowApply(t *testing.T) {
 	chosen := a.show(ctx, verbDelete, []item{{files: []string{"a"}}, {files: []string{"b"}}, {files: []string{"c"}}})
 	if !slices.Equal(chosen, []int{0, 1, 2}) || out.Len() != 0 {
 		t.Fatalf("apply: chosen = %v, output = %q", chosen, out.String())
+	}
+}
+
+func TestSpread(t *testing.T) {
+	t.Parallel()
+
+	ten := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+	if got := spread(ten, 5); !slices.Equal(got, []int{0, 2, 4, 6, 9}) {
+		t.Errorf("spread(10, 5) = %v", got)
+	}
+
+	if got := spread(ten[:3], 5); !slices.Equal(got, []int{0, 1, 2}) {
+		t.Errorf("spread(3, 5) = %v", got)
 	}
 }

@@ -21,9 +21,10 @@ type item struct {
 	warn  string
 }
 
-// show prints the plan and returns the indexes of the items to run: all of
-// them with --apply, none otherwise, since showing the plan is then the job.
-func (a *app) show(ctx context.Context, verb string, items []item) []int {
+// show prints the plan, then the notes a verb wants under it, and returns
+// the indexes of the items to run: all of them with --apply, none otherwise,
+// since showing the plan is then the job.
+func (a *app) show(ctx context.Context, verb string, items []item, notes ...string) []int {
 	if a.apply {
 		return everything(len(items))
 	}
@@ -40,6 +41,10 @@ func (a *app) show(ctx context.Context, verb string, items []item) []int {
 		for _, it := range g.items {
 			showItem(ctx, verb, it)
 		}
+	}
+
+	for _, note := range notes {
+		log.Infof(ctx, "%s", note)
 	}
 
 	log.Infof(ctx, "%s Re-run with --apply to %s them.", styleBold.Render(summary(items)+"."), verb)

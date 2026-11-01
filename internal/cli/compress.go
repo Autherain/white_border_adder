@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"runtime"
 
@@ -24,8 +25,11 @@ level, same pixel size, and written as <dir>/compressed/compressed_<name>.
 The originals are never modified.
 
 The only lever is --jpeg-quality. At 100 a JPEG usually comes out larger
-than the original and the total says so; 85 is where the loss stops being
-visible on a screen. Nothing is written without --apply.`,
+than the original; 85 is where the loss stops being visible on a screen.
+
+The dry run encodes 5 photos spread across the list in memory and prints
+an estimate of the whole saving, "6.2 GB -> 2.2 GB, 63% smaller", before
+the total. Nothing is written without --apply.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
@@ -61,7 +65,7 @@ func (a *app) runCompress(ctx context.Context, dir string, o compress.Options, w
 		items = append(items, item{dir: rel(dir, filepath.Dir(j.In)), files: []string{rel(dir, j.Out)}, size: j.Size})
 	}
 
-	chosen := a.show(ctx, verbWrite, items)
+	chosen := a.show(ctx, verbWrite, items, a.estimate(ctx, dir, jobs, o, workers)...)
 	if len(chosen) == 0 {
 		return nil
 	}
@@ -79,6 +83,78 @@ func (a *app) runCompress(ctx context.Context, dir string, o compress.Options, w
 	}
 
 	return failures(failed)
+}
+
+// sampleSize is how many photos a dry run really encodes to estimate the
+// saving: enough to average out one odd photo, few enough to stay quick.
+const sampleSize = 5
+
+// estimate encodes a spread of the jobs in memory and scales their ratio up to
+// the whole list. Only a dry run calls it; --apply measures for real.
+func (a *app) estimate(ctx context.Context, dir string, jobs []compress.Job, o compress.Options, workers int,
+) []string {
+	if a.apply || len(jobs) == 0 {
+		return nil
+	}
+
+	sample := spread(jobs, sampleSize)
+	results := runAll(workers, sample, func(j compress.Job) compressed {
+		n, err := j.Estimate(a.fs, o)
+
+		return compressed{job: j, out: n, err: err}
+	})
+
+	in, out, measured := int64(0), int64(0), 0
+
+	for _, r := range results {
+		if r.err != nil {
+			log.Debugf(ctx, "skip estimate on %s: %v", rel(dir, r.job.In), r.err)
+
+			continue
+		}
+
+		log.Debugf(ctx, "measured %s: %s -> %s", rel(dir, r.job.In), human(r.job.Size), human(r.out))
+
+		in += r.job.Size
+		out += r.out
+		measured++
+	}
+
+	if measured == 0 || in == 0 {
+		return nil
+	}
+
+	total := int64(0)
+	for _, j := range jobs {
+		total += j.Size
+	}
+
+	after := total * out / in
+	change := "smaller"
+	percent := (total - after) * 100 / total
+
+	if after > total {
+		change = "larger"
+		percent = (after - total) * 100 / total
+	}
+
+	return []string{fmt.Sprintf("estimate: %s -> %s, %d%% %s, measured on %d of %d photos",
+		human(total), human(after), percent, change, measured, len(jobs))}
+}
+
+// spread picks n items evenly along the list, first and last included, so a
+// shoot that starts in the dark and ends in daylight is sampled across.
+func spread[T any](all []T, n int) []T {
+	if len(all) <= n {
+		return all
+	}
+
+	picked := make([]T, 0, n)
+	for i := range n {
+		picked = append(picked, all[i*(len(all)-1)/(n-1)])
+	}
+
+	return picked
 }
 
 type compressed struct {

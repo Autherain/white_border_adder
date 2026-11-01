@@ -88,7 +88,19 @@ a JPEG usually comes out larger than the original, and the total says so;
 | `--force` | false | Overwrite an output file that already exists; otherwise it is skipped. |
 | `--workers` | number of CPUs | Photos processed at once. |
 
-Measured on the sample photo of this repository:
+The dry run really encodes 5 photos spread across the list, in memory, and
+scales their ratio up to the whole plan, so you know what you gain before
+`--apply`:
+
+```
+$ wba compress 2025 --recursive --jpeg-quality 85
+...
+estimate: 6.2 GB -> 2.2 GB, 63% smaller, measured on 5 of 591 photos
+591 files, 6.2 GB. Re-run with --apply to write them.
+```
+
+`--verbose` prints the five measurements. Measured on the sample photo of
+this repository:
 
 | `--jpeg-quality` | Output | Result |
 |---|---|---|

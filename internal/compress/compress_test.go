@@ -3,6 +3,9 @@ package compress
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -167,5 +170,50 @@ func TestPlanRawTherapeeLayout(t *testing.T) {
 	}
 	if !reflect.DeepEqual(jobs, want) {
 		t.Fatalf("jobs = %v, want %v", jobs, want)
+	}
+}
+
+// Estimate must announce the size Run then produces, for both encoders.
+func TestEstimateMatchesRun(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 6))
+
+	for i := range img.Pix {
+		img.Pix[i] = byte(i * 7)
+	}
+
+	write := func(name string, enc func(io.Writer, image.Image) error) {
+		t.Helper()
+
+		var buf bytes.Buffer
+		if err := enc(&buf, img); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := afero.WriteFile(fs, name, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("a.jpg", func(w io.Writer, m image.Image) error { return jpeg.Encode(w, m, &jpeg.Options{Quality: 100}) })
+	write("b.png", png.Encode)
+
+	for _, name := range []string{"a.jpg", "b.png"} {
+		job := Job{In: name, Out: "out/" + name}
+		o := Options{JPEGQuality: 85}
+
+		estimated, err := job.Estimate(fs, o)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		written, err := job.Run(fs, o)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if estimated != written || estimated == 0 {
+			t.Errorf("%s: estimate = %d, run wrote %d", name, estimated, written)
+		}
 	}
 }

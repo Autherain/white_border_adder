@@ -64,6 +64,31 @@ func Plan(ctx context.Context, fsys afero.Fs, dir string, o Options) ([]Job, err
 	return p.jobs, nil
 }
 
+// Estimate encodes the copy in memory and returns the size it would have,
+// so a dry run can say what the verb would save without writing anything.
+func (j Job) Estimate(fsys afero.Fs, o Options) (int64, error) {
+	img, err := decode(fsys, j.In)
+	if err != nil {
+		return 0, err
+	}
+
+	var n counter
+	if err := encode(&n, j.Out, img, o.JPEGQuality); err != nil {
+		return 0, fmt.Errorf("encode output image: %w", err)
+	}
+
+	return int64(n), nil
+}
+
+// counter is an io.Writer that only measures.
+type counter int64
+
+func (c *counter) Write(p []byte) (int, error) {
+	*c += counter(len(p))
+
+	return len(p), nil
+}
+
 // Run writes the compressed copy and returns its size in bytes.
 func (j Job) Run(fsys afero.Fs, o Options) (int64, error) {
 	img, err := decode(fsys, j.In)
