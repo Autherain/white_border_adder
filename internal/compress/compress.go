@@ -1,6 +1,7 @@
 package compress
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 	"golang.org/x/image/draw"
 )
@@ -32,8 +34,6 @@ type Options struct {
 	Out       string
 	Recursive bool
 	Force     bool
-	// Verbose receives one "skip <path>: <reason>" line per skipped file; nil is quiet.
-	Verbose io.Writer
 }
 
 type Job struct {
@@ -44,8 +44,9 @@ type Job struct {
 }
 
 // Plan lists the images under dir and where their compressed copy goes.
-// Nothing is written; Job.Run does that.
-func Plan(fsys afero.Fs, dir string, o Options) ([]Job, error) {
+// Nothing is written; Job.Run does that. Skipped files are reported on the
+// context's logger at debug level.
+func Plan(ctx context.Context, fsys afero.Fs, dir string, o Options) ([]Job, error) {
 	info, err := fsys.Stat(dir)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", dir, err)
@@ -55,7 +56,7 @@ func Plan(fsys afero.Fs, dir string, o Options) ([]Job, error) {
 		return nil, fmt.Errorf("%s is not a directory", dir)
 	}
 
-	p := planner{fsys: fsys, dir: dir, o: o, jobs: []Job{}}
+	p := planner{ctx: ctx, fsys: fsys, dir: dir, o: o, jobs: []Job{}}
 
 	if o.Recursive {
 		err = afero.Walk(fsys, dir, p.walk)
@@ -109,6 +110,7 @@ func (j Job) Run(fsys afero.Fs, o Options) (int64, error) {
 }
 
 type planner struct {
+	ctx  context.Context
 	fsys afero.Fs
 	dir  string
 	o    Options
@@ -205,16 +207,12 @@ func (p *planner) add(path string, size int64) error {
 }
 
 func (p *planner) report(path, reason string) {
-	if p.o.Verbose == nil {
-		return
-	}
-
 	rel, err := filepath.Rel(p.dir, path)
 	if err != nil {
 		rel = path
 	}
 
-	_, _ = fmt.Fprintf(p.o.Verbose, "skip %s: %s\n", rel, reason)
+	log.Debugf(p.ctx, "skip %s: %s", rel, reason)
 }
 
 func isImage(path string) bool {

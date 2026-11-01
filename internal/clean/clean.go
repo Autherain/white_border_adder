@@ -1,15 +1,16 @@
 package clean
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 )
 
@@ -22,7 +23,6 @@ type Options struct {
 	Pattern   string
 	Exclude   []string
 	Recursive bool
-	Verbose   io.Writer
 }
 
 type Candidate struct {
@@ -54,7 +54,7 @@ func (c Candidate) Delete(fs afero.Fs) error {
 	return errors.Join(errs...)
 }
 
-func Plan(fs afero.Fs, dir string, o Options) ([]Candidate, error) {
+func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate, error) {
 	info, err := fs.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -73,13 +73,13 @@ func Plan(fs afero.Fs, dir string, o Options) ([]Candidate, error) {
 	}
 
 	if !o.Recursive {
-		return scan(fs, dir, dir, o)
+		return scan(ctx, fs, dir, dir, o)
 	}
 
-	return walk(fs, dir, o)
+	return walk(ctx, fs, dir, o)
 }
 
-func walk(fs afero.Fs, dir string, o Options) ([]Candidate, error) {
+func walk(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate, error) {
 	candidates := []Candidate{}
 
 	err := afero.Walk(fs, dir, func(p string, info os.FileInfo, err error) error {
@@ -95,7 +95,7 @@ func walk(fs afero.Fs, dir string, o Options) ([]Candidate, error) {
 			return filepath.SkipDir
 		}
 
-		found, err := scan(fs, dir, p, o)
+		found, err := scan(ctx, fs, dir, p, o)
 		if err != nil {
 			return err
 		}
@@ -121,12 +121,10 @@ func skipped(name string) bool {
 
 // scan lists the candidates at the root of one directory, root being the user's argument
 // used only to print paths relative to it.
-func scan(fs afero.Fs, root, dir string, o Options) ([]Candidate, error) {
-	developed, err := convertedNames(fs, filepath.Join(dir, convertedDir))
-	if err != nil {
-		if o.Verbose != nil {
-			_, _ = fmt.Fprintf(o.Verbose, "skip %s: no %s/\n", relative(root, dir), convertedDir)
-		}
+func scan(ctx context.Context, fs afero.Fs, root, dir string, o Options) ([]Candidate, error) {
+	developed, ok := convertedNames(fs, filepath.Join(dir, convertedDir))
+	if !ok {
+		log.Debugf(ctx, "skip %s: no %s/", relative(root, dir), convertedDir)
 
 		return nil, nil
 	}
@@ -172,21 +170,17 @@ func candidateFor(fs afero.Fs, dir string, entry os.FileInfo, developed []string
 	return candidate, true
 }
 
-// convertedNames lists the lowercased names of the regular files in converted/; the
-// error doubles as "this is not a photo directory".
-func convertedNames(fs afero.Fs, converted string) ([]string, error) {
+// convertedNames lists the lowercased names of the regular files in converted/;
+// false means "this is not a photo directory".
+func convertedNames(fs afero.Fs, converted string) ([]string, bool) {
 	info, err := fs.Stat(converted)
-	if err != nil {
-		return nil, err
-	}
-
-	if !info.IsDir() {
-		return nil, fmt.Errorf("%s: not a directory", converted)
+	if err != nil || !info.IsDir() {
+		return nil, false
 	}
 
 	entries, err := afero.ReadDir(fs, converted)
 	if err != nil {
-		return nil, err
+		return nil, false
 	}
 
 	names := []string{}
@@ -197,7 +191,7 @@ func convertedNames(fs afero.Fs, converted string) ([]string, error) {
 		}
 	}
 
-	return names, nil
+	return names, true
 }
 
 func isDeveloped(stem string, converted []string) bool {

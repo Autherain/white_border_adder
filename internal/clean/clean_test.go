@@ -1,6 +1,9 @@
 package clean
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
+
+	"github.com/evaneecloo/white_border_adder/internal/log"
 )
 
 func newTree(t *testing.T, files map[string]string) afero.Fs {
@@ -210,7 +215,7 @@ func TestPlan(t *testing.T) {
 			fs := newTree(t, tt.tree)
 			before := paths(t, fs)
 
-			got, err := Plan(fs, tt.dir, tt.opts)
+			got, err := Plan(context.Background(), fs, tt.dir, tt.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -270,7 +275,7 @@ func TestPlanSizes(t *testing.T) {
 		"paris/converted/x.jpg":  "jpeg",
 	})
 
-	got, err := Plan(fs, "paris", Options{Pattern: "*.rw2"})
+	got, err := Plan(context.Background(), fs, "paris", Options{Pattern: "*.rw2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +307,7 @@ func TestPlanErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Plan(fs, tt.dir, tt.opts); err == nil {
+			if _, err := Plan(context.Background(), fs, tt.dir, tt.opts); err == nil {
 				t.Fatal("expected an error")
 			}
 		})
@@ -318,7 +323,9 @@ func TestPlanVerbose(t *testing.T) {
 
 	var out strings.Builder
 
-	if _, err := Plan(fs, ".", Options{Pattern: "*.rw2", Recursive: true, Verbose: &out}); err != nil {
+	ctx := log.With(context.Background(), log.New(&out, io.Discard, slog.LevelDebug))
+
+	if _, err := Plan(ctx, fs, ".", Options{Pattern: "*.rw2", Recursive: true}); err != nil {
 		t.Fatal(err)
 	}
 

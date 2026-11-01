@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	if err := cli.Root(afero.NewOsFs(), os.Stdout, os.Stderr).Execute(); err != nil {
+	if err := cli.Root(afero.NewOsFs(), os.Stdin, os.Stdout, os.Stderr).Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

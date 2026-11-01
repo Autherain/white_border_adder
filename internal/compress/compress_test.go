@@ -2,11 +2,16 @@ package compress
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"log/slog"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/spf13/afero"
+
+	"github.com/evaneecloo/white_border_adder/internal/log"
 )
 
 func defaults() Options {
@@ -121,10 +126,9 @@ func TestPlan(t *testing.T) {
 			fs := newTree(t, tree)
 			var verbose bytes.Buffer
 
-			o := tt.opts(defaults())
-			o.Verbose = &verbose
+			ctx := log.With(context.Background(), log.New(&verbose, io.Discard, slog.LevelDebug))
 
-			got, err := Plan(fs, "photos", o)
+			got, err := Plan(ctx, fs, "photos", tt.opts(defaults()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,11 +147,11 @@ func TestPlan(t *testing.T) {
 func TestPlanRejectsMissingOrFileArgument(t *testing.T) {
 	fs := newTree(t, map[string]string{"photos/IMG_1.jpg": "jpeg"})
 
-	if _, err := Plan(fs, "nowhere", defaults()); err == nil {
+	if _, err := Plan(context.Background(), fs, "nowhere", defaults()); err == nil {
 		t.Error("missing directory: want error")
 	}
 
-	if _, err := Plan(fs, "photos/IMG_1.jpg", defaults()); err == nil {
+	if _, err := Plan(context.Background(), fs, "photos/IMG_1.jpg", defaults()); err == nil {
 		t.Error("file argument: want error")
 	}
 }

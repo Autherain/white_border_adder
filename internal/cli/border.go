@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"context"
 	"runtime"
 
 	"github.com/evaneecloo/white_border_adder/internal/border"
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -25,11 +27,10 @@ func (a *app) borderCmd() *cobra.Command {
 		Use:   "border <dir>",
 		Short: "Write a white-bordered copy of every JPEG and PNG in <dir>",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
-			o.Verbose = a.skipWriter()
 
-			return a.runBorder(args[0], o, workers)
+			return a.runBorder(cmd.Context(), args[0], o, workers)
 		},
 	}
 
@@ -51,30 +52,31 @@ func (a *app) borderCmd() *cobra.Command {
 	return cmd
 }
 
-func (a *app) runBorder(dir string, o border.Options, workers int) error {
-	jobs, err := border.Plan(a.fs, dir, o)
+func (a *app) runBorder(ctx context.Context, dir string, o border.Options, workers int) error {
+	jobs, err := border.Plan(ctx, a.fs, dir, o)
 	if err != nil {
 		return err
 	}
 
 	if len(jobs) == 0 {
-		a.out("nothing to do")
+		log.Infof(ctx, "%s", styleFaint.Render("nothing to do"))
 
 		return nil
 	}
 
-	if !a.apply {
-		for _, j := range jobs {
-			a.out("would write %s", rel(dir, j.Out))
-		}
-
-		a.out("%s. Re-run with --apply to write them.", files(len(jobs)))
-
-		return nil
+	items := make([]item, 0, len(jobs))
+	for _, j := range jobs {
+		items = append(items, item{files: []string{rel(dir, j.Out)}})
 	}
 
-	failed := a.writeAll(dir, jobs, o, workers)
-	a.out("%s written.", files(len(jobs)-failed))
+	chosen, err := a.picker().pick(ctx, verbWrite, items)
+	if err != nil || len(chosen) == 0 {
+		return err
+	}
+
+	picked := pickFrom(jobs, chosen)
+	failed := a.writeAll(ctx, dir, picked, o, workers)
+	log.Infof(ctx, "%s", styleBold.Render(files(len(picked)-failed)+" written."))
 
 	return failures(failed)
 }
@@ -84,7 +86,7 @@ type result struct {
 	err error
 }
 
-func (a *app) writeAll(dir string, jobs []border.Job, o border.Options, workers int) int {
+func (a *app) writeAll(ctx context.Context, dir string, jobs []border.Job, o border.Options, workers int) int {
 	results := runAll(workers, jobs, func(j border.Job) result {
 		return result{job: j, err: j.Run(a.fs, o)}
 	})
@@ -95,12 +97,12 @@ func (a *app) writeAll(dir string, jobs []border.Job, o border.Options, workers 
 		if r.err != nil {
 			failed++
 
-			a.fail("%s: %v", rel(dir, r.job.In), r.err)
+			log.Errorf(ctx, "%s: %v", rel(dir, r.job.In), r.err)
 
 			continue
 		}
 
-		a.out("wrote %s", rel(dir, r.job.Out))
+		log.Infof(ctx, "%s %s", styleDone.Render("wrote"), rel(dir, r.job.Out))
 	}
 
 	return failed

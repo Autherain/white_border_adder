@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"context"
 	"runtime"
 
 	"github.com/evaneecloo/white_border_adder/internal/compress"
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -15,11 +17,10 @@ func (a *app) compressCmd() *cobra.Command {
 		Use:   "compress <dir>",
 		Short: "Write a smaller copy of every JPEG and PNG in <dir>",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
-			o.Verbose = a.skipWriter()
 
-			return a.runCompress(args[0], o, workers)
+			return a.runCompress(cmd.Context(), args[0], o, workers)
 		},
 	}
 
@@ -35,36 +36,38 @@ func (a *app) compressCmd() *cobra.Command {
 	return cmd
 }
 
-func (a *app) runCompress(dir string, o compress.Options, workers int) error {
-	jobs, err := compress.Plan(a.fs, dir, o)
+func (a *app) runCompress(ctx context.Context, dir string, o compress.Options, workers int) error {
+	jobs, err := compress.Plan(ctx, a.fs, dir, o)
 	if err != nil {
 		return err
 	}
 
 	if len(jobs) == 0 {
-		a.out("nothing to do")
+		log.Infof(ctx, "%s", styleFaint.Render("nothing to do"))
 
 		return nil
 	}
 
-	if !a.apply {
-		for _, j := range jobs {
-			a.out("would write %s", rel(dir, j.Out))
-		}
-
-		a.out("%s. Re-run with --apply to write them.", files(len(jobs)))
-
-		return nil
+	items := make([]item, 0, len(jobs))
+	for _, j := range jobs {
+		items = append(items, item{files: []string{rel(dir, j.Out)}, size: j.Size})
 	}
 
-	failed, saved := a.compressAll(dir, jobs, o, workers)
+	chosen, err := a.picker().pick(ctx, verbWrite, items)
+	if err != nil || len(chosen) == 0 {
+		return err
+	}
+
+	picked := pickFrom(jobs, chosen)
+	failed, saved := a.compressAll(ctx, dir, picked, o, workers)
+	written := files(len(picked) - failed)
 
 	// Quality 100 without a size limit can grow a JPEG; say so instead of
 	// printing a negative saving.
 	if saved < 0 {
-		a.out("%s written, %s larger.", files(len(jobs)-failed), human(-saved))
+		log.Infof(ctx, "%s", styleBold.Render(written+" written, "+human(-saved)+" larger."))
 	} else {
-		a.out("%s written, %s saved.", files(len(jobs)-failed), human(saved))
+		log.Infof(ctx, "%s", styleBold.Render(written+" written, "+human(saved)+" saved."))
 	}
 
 	return failures(failed)
@@ -76,7 +79,8 @@ type compressed struct {
 	err error
 }
 
-func (a *app) compressAll(dir string, jobs []compress.Job, o compress.Options, workers int) (int, int64) {
+func (a *app) compressAll(ctx context.Context, dir string, jobs []compress.Job, o compress.Options, workers int,
+) (int, int64) {
 	results := runAll(workers, jobs, func(j compress.Job) compressed {
 		n, err := j.Run(a.fs, o)
 
@@ -89,14 +93,15 @@ func (a *app) compressAll(dir string, jobs []compress.Job, o compress.Options, w
 		if r.err != nil {
 			failed++
 
-			a.fail("%s: %v", rel(dir, r.job.In), r.err)
+			log.Errorf(ctx, "%s: %v", rel(dir, r.job.In), r.err)
 
 			continue
 		}
 
 		saved += r.job.Size - r.out
 
-		a.out("wrote %s, %s -> %s", rel(dir, r.job.Out), human(r.job.Size), human(r.out))
+		log.Infof(ctx, "%s %s, %s -> %s",
+			styleDone.Render("wrote"), rel(dir, r.job.Out), human(r.job.Size), human(r.out))
 	}
 
 	return failed, saved

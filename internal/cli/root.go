@@ -3,10 +3,13 @@ package cli
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // Set at build time with -ldflags "-X .../internal/cli.version=...".
@@ -14,15 +17,17 @@ var version = "dev"
 
 type app struct {
 	fs        afero.Fs
+	stdin     io.Reader
 	stdout    io.Writer
 	stderr    io.Writer
 	apply     bool
+	plain     bool
 	recursive bool
 	verbose   bool
 }
 
-func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
-	a := &app{fs: fs, stdout: stdout, stderr: stderr}
+func Root(fs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	a := &app{fs: fs, stdin: stdin, stdout: stdout, stderr: stderr}
 
 	root := &cobra.Command{
 		Use:           "wba",
@@ -32,13 +37,21 @@ func Root(fs afero.Fs, stdout, stderr io.Writer) *cobra.Command {
 			// Flags are parsed by now: a failure from here on is a runtime
 			// error, and repeating the usage block would bury it.
 			cmd.SilenceUsage = true
+
+			level := slog.LevelInfo
+			if a.verbose {
+				level = slog.LevelDebug
+			}
+
+			cmd.SetContext(log.With(cmd.Context(), log.New(stdout, stderr, level)))
 		},
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 
 	flags := root.PersistentFlags()
-	flags.BoolVar(&a.apply, "apply", false, "do it; without this flag only print what would be done")
+	flags.BoolVar(&a.apply, "apply", false, "do it; without this flag nothing is written or deleted")
+	flags.BoolVar(&a.plain, "plain", false, "print lines instead of the interactive list; implied outside a terminal")
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
@@ -58,13 +71,10 @@ func versionCmd() *cobra.Command {
 	}
 }
 
-// skipWriter is where the packages report what they skipped; nil keeps them quiet.
-func (a *app) skipWriter() io.Writer {
-	if a.verbose {
-		return a.stdout
-	}
+func isTerminal(stream any) bool {
+	f, ok := stream.(interface{ Fd() uintptr })
 
-	return nil
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // rel prints paths the way the user typed the argument, not as the fs joined them.
@@ -93,12 +103,24 @@ func failures(n int) error {
 	return fmt.Errorf("%s failed", files(n))
 }
 
-// Output lines are best effort: a closed stdout must not turn a successful
-// run into a failure, so write errors are dropped on purpose.
-func (a *app) out(format string, args ...any) {
-	_, _ = fmt.Fprintf(a.stdout, format+"\n", args...)
-}
+// human rounds to the unit a photographer thinks in: raws are tens of MB.
+func human(bytes int64) string {
+	const (
+		kb = 1000
+		mb = 1000 * kb
+		gb = 1000 * mb
+	)
 
-func (a *app) fail(format string, args ...any) {
-	_, _ = fmt.Fprintf(a.stderr, format+"\n", args...)
+	switch {
+	case bytes >= gb:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/gb)
+	case bytes >= 10*mb:
+		return fmt.Sprintf("%d MB", (bytes+mb/2)/mb)
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/mb)
+	case bytes >= kb:
+		return fmt.Sprintf("%d kB", (bytes+kb/2)/kb)
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }

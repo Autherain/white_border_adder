@@ -1,9 +1,10 @@
 package cli
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/evaneecloo/white_border_adder/internal/clean"
+	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -14,11 +15,10 @@ func (a *app) cleanCmd() *cobra.Command {
 		Use:   "clean <dir>",
 		Short: "Delete raws that RawTherapee never developed",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Recursive = a.recursive
-			o.Verbose = a.skipWriter()
 
-			return a.runClean(args[0], o)
+			return a.runClean(cmd.Context(), args[0], o)
 		},
 	}
 
@@ -29,82 +29,69 @@ func (a *app) cleanCmd() *cobra.Command {
 	return cmd
 }
 
-func (a *app) runClean(dir string, o clean.Options) error {
-	candidates, err := clean.Plan(a.fs, dir, o)
+func (a *app) runClean(ctx context.Context, dir string, o clean.Options) error {
+	candidates, err := clean.Plan(ctx, a.fs, dir, o)
 	if err != nil {
 		return err
 	}
 
 	if len(candidates) == 0 {
-		a.out("nothing to do")
+		log.Infof(ctx, "%s", styleFaint.Render("nothing to do"))
 
 		return nil
 	}
 
-	count, bytes := 0, int64(0)
-
+	items := make([]item, 0, len(candidates))
 	for _, c := range candidates {
-		count += len(c.Files())
-		bytes += c.Size + c.SidecarSize
+		items = append(items, item{files: relAll(dir, c.Files()), size: c.Size + c.SidecarSize})
 	}
 
-	if !a.apply {
-		a.listDeletions("would delete", dir, candidates)
-		a.out("%s, %s. Re-run with --apply to delete them.", files(count), human(bytes))
-
-		return nil
+	chosen, err := a.picker().pick(ctx, verbDelete, items)
+	if err != nil || len(chosen) == 0 {
+		return err
 	}
 
-	failed := a.deleteAll(dir, candidates)
-	a.out("%s deleted, %s freed.", files(count), human(bytes))
+	failed, done := a.deleteAll(ctx, dir, pickFrom(candidates, chosen))
+	log.Infof(ctx, "%s", styleBold.Render(files(done.count)+" deleted, "+human(done.bytes)+" freed."))
 
 	return failures(failed)
 }
 
-func (a *app) listDeletions(verb, dir string, candidates []clean.Candidate) {
-	for _, c := range candidates {
-		for _, p := range c.Files() {
-			a.out("%s %s", verb, rel(dir, p))
-		}
-	}
+type tally struct {
+	count int
+	bytes int64
 }
 
-func (a *app) deleteAll(dir string, candidates []clean.Candidate) int {
-	failed := 0
+// deleteAll removes the candidates one by one and tallies what actually went,
+// so a failure in the middle does not inflate the freed total.
+func (a *app) deleteAll(ctx context.Context, dir string, candidates []clean.Candidate) (int, tally) {
+	failed, done := 0, tally{}
 
 	for _, c := range candidates {
 		if err := c.Delete(a.fs); err != nil {
 			failed++
 
-			a.fail("%s: %v", rel(dir, c.Path), err)
+			log.Errorf(ctx, "%s: %v", rel(dir, c.Path), err)
 
 			continue
 		}
 
-		a.listDeletions("deleted", dir, []clean.Candidate{c})
+		for _, p := range c.Files() {
+			log.Infof(ctx, "%s %s", styleGone.Render("deleted"), rel(dir, p))
+		}
+
+		done.count += len(c.Files())
+		done.bytes += c.Size + c.SidecarSize
 	}
 
-	return failed
+	return failed, done
 }
 
-// human rounds to the unit a photographer thinks in: raws are tens of MB.
-func human(bytes int64) string {
-	const (
-		kb = 1000
-		mb = 1000 * kb
-		gb = 1000 * mb
-	)
-
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/gb)
-	case bytes >= 10*mb:
-		return fmt.Sprintf("%d MB", (bytes+mb/2)/mb)
-	case bytes >= mb:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/mb)
-	case bytes >= kb:
-		return fmt.Sprintf("%d kB", (bytes+kb/2)/kb)
-	default:
-		return fmt.Sprintf("%d B", bytes)
+func relAll(dir string, paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, rel(dir, p))
 	}
+
+	return out
 }
