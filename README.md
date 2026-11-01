@@ -199,6 +199,20 @@ Paths work with either slash: `wba clean D:\photos\2024-10-paris` and
 ```
 make build            # ./wba for the current OS
 make build-windows    # ./wba.exe, from Linux or macOS
+make install          # ~/.local/bin/wba plus zsh and bash completion files
 make test
 make lint             # needs golangci-lint v2
+```
+
+### Shell completion
+
+`wba completion zsh`, `bash`, `fish` or `powershell` prints the script.
+`make install` writes the zsh and bash ones next to the binary under
+`~/.local/share`; for zsh, `~/.local/share/zsh/site-functions` must be in
+`fpath` before `compinit`. Since the binary generates the script, a new
+build followed by `make install` is all it takes after a change. For
+PowerShell on Windows, add to your `$PROFILE`:
+
+```
+wba completion powershell | Out-String | Invoke-Expression
 ```
