@@ -56,7 +56,7 @@ func (a *app) runClean(dir string, o clean.Options) error {
 	}
 
 	failed := a.deleteAll(dir, candidates)
-	a.out("%s, %s deleted.", files(count), human(bytes))
+	a.out("%s deleted, %s freed.", files(count), human(bytes))
 
 	return failures(failed)
 }
