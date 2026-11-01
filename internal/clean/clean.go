@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alitto/pond/v2"
 	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 )
@@ -72,38 +73,7 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate,
 		}
 	}
 
-	if !o.Recursive {
-		return scan(ctx, fs, dir, dir, o)
-	}
-
-	return walk(ctx, fs, dir, o)
-}
-
-func walk(ctx context.Context, fs afero.Fs, dir string, o Options) ([]Candidate, error) {
-	candidates := []Candidate{}
-
-	err := afero.Walk(fs, dir, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() {
-			return nil
-		}
-
-		if p != dir && skipped(info.Name()) {
-			return filepath.SkipDir
-		}
-
-		found, err := scan(ctx, fs, dir, p, o)
-		if err != nil {
-			return err
-		}
-
-		candidates = append(candidates, found...)
-
-		return nil
-	})
+	candidates, err := scanTree(ctx, fs, dir, o)
 	if err != nil {
 		return nil, err
 	}
@@ -119,33 +89,118 @@ func skipped(name string) bool {
 	return strings.HasPrefix(name, ".") || name == convertedDir
 }
 
-// scan lists the candidates at the root of one directory, root being the user's argument
-// used only to print paths relative to it.
-func scan(ctx context.Context, fs afero.Fs, root, dir string, o Options) ([]Candidate, error) {
-	developed, ok := convertedNames(fs, filepath.Join(dir, convertedDir))
-	if !ok {
-		log.Debugf(ctx, "skip %s: no %s/", relative(root, dir), convertedDir)
+// A slow mount (a cloud drive over 9p) makes every listing a round trip, so
+// the directories of one depth are listed at the same time. Levels stay
+// sequential: a task never waits on another, so a bounded pool cannot stall.
+const listers = 16
 
-		return nil, nil
-	}
+type listed struct {
+	dir        string
+	candidates []Candidate
+	subdirs    []string
+	skipped    bool
+}
 
-	entries, err := afero.ReadDir(fs, dir)
-	if err != nil {
-		return nil, err
-	}
+func scanTree(ctx context.Context, fs afero.Fs, root string, o Options) ([]Candidate, error) {
+	pool := pond.NewResultPool[listed](listers)
+	defer pool.StopAndWait()
 
 	candidates := []Candidate{}
+	level := []string{root}
 
-	for _, entry := range entries {
-		if candidate, ok := candidateFor(fs, dir, entry, developed, o); ok {
-			candidates = append(candidates, candidate)
+	for len(level) > 0 {
+		got, err := scanLevel(pool, fs, level, o)
+		if err != nil {
+			return nil, err
+		}
+
+		level = nil
+
+		for _, l := range got {
+			// Logged here rather than in the task so the lines keep the listing order.
+			if l.skipped {
+				log.Debugf(ctx, "skip %s: no %s/", relative(root, l.dir), convertedDir)
+			}
+
+			candidates = append(candidates, l.candidates...)
+			level = append(level, l.subdirs...)
 		}
 	}
 
 	return candidates, nil
 }
 
-func candidateFor(fs afero.Fs, dir string, entry os.FileInfo, developed []string, o Options) (Candidate, bool) {
+func scanLevel(pool pond.ResultPool[listed], fs afero.Fs, dirs []string, o Options) ([]listed, error) {
+	tasks := make([]pond.ResultTask[listed], 0, len(dirs))
+	for _, dir := range dirs {
+		tasks = append(tasks, pool.SubmitErr(func() (listed, error) { return scan(fs, dir, o) }))
+	}
+
+	got := make([]listed, 0, len(dirs))
+
+	for _, task := range tasks {
+		l, err := task.Wait()
+		if err != nil {
+			return nil, err
+		}
+
+		got = append(got, l)
+	}
+
+	return got, nil
+}
+
+// scan lists one directory once and takes everything from that listing: the raws,
+// their sidecars, whether converted/ exists and, when recursive, where to descend.
+func scan(fs afero.Fs, dir string, o Options) (listed, error) {
+	entries, err := afero.ReadDir(fs, dir)
+	if err != nil {
+		return listed{}, err
+	}
+
+	listing := map[string]os.FileInfo{}
+	for _, entry := range entries {
+		listing[entry.Name()] = entry
+	}
+
+	got := listed{dir: dir}
+
+	if developed, ok := convertedNames(fs, dir, listing[convertedDir]); ok {
+		got.candidates = candidatesIn(dir, entries, listing, developed, o)
+	} else {
+		got.skipped = true
+	}
+
+	if !o.Recursive {
+		return got, nil
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() && !skipped(entry.Name()) {
+			got.subdirs = append(got.subdirs, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	return got, nil
+}
+
+func candidatesIn(dir string, entries []os.FileInfo, listing map[string]os.FileInfo, developed []string,
+	o Options,
+) []Candidate {
+	candidates := []Candidate{}
+
+	for _, entry := range entries {
+		if candidate, ok := candidateFor(dir, entry, listing, developed, o); ok {
+			candidates = append(candidates, candidate)
+		}
+	}
+
+	return candidates
+}
+
+func candidateFor(dir string, entry os.FileInfo, listing map[string]os.FileInfo, developed []string,
+	o Options,
+) (Candidate, bool) {
 	if !entry.Mode().IsRegular() {
 		return Candidate{}, false
 	}
@@ -162,7 +217,7 @@ func candidateFor(fs afero.Fs, dir string, entry os.FileInfo, developed []string
 
 	candidate := Candidate{Path: filepath.Join(dir, entry.Name()), Size: entry.Size()}
 
-	if sidecar, err := fs.Stat(candidate.Path + sidecarExt); err == nil && sidecar.Mode().IsRegular() {
+	if sidecar, ok := listing[entry.Name()+sidecarExt]; ok && sidecar.Mode().IsRegular() {
 		candidate.Sidecar = candidate.Path + sidecarExt
 		candidate.SidecarSize = sidecar.Size()
 	}
@@ -170,15 +225,14 @@ func candidateFor(fs afero.Fs, dir string, entry os.FileInfo, developed []string
 	return candidate, true
 }
 
-// convertedNames lists the lowercased names of the regular files in converted/;
-// false means "this is not a photo directory".
-func convertedNames(fs afero.Fs, converted string) ([]string, bool) {
-	info, err := fs.Stat(converted)
-	if err != nil || !info.IsDir() {
+// convertedNames lists the lowercased names of the regular files in converted/,
+// given its entry from the parent listing; false means "not a photo directory".
+func convertedNames(fs afero.Fs, dir string, converted os.FileInfo) ([]string, bool) {
+	if converted == nil || !converted.IsDir() {
 		return nil, false
 	}
 
-	entries, err := afero.ReadDir(fs, converted)
+	entries, err := afero.ReadDir(fs, filepath.Join(dir, convertedDir))
 	if err != nil {
 		return nil, false
 	}

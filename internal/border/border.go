@@ -2,6 +2,7 @@ package border
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -58,13 +59,7 @@ func Plan(ctx context.Context, fsys afero.Fs, dir string, o Options) ([]Job, err
 
 	p := planner{ctx: ctx, fsys: fsys, dir: dir, o: o, jobs: []Job{}}
 
-	if o.Recursive {
-		err = afero.Walk(fsys, dir, p.walk)
-	} else {
-		err = p.readDir()
-	}
-
-	if err != nil {
+	if err := p.scan(dir); err != nil {
 		return nil, err
 	}
 
@@ -107,18 +102,22 @@ type planner struct {
 	jobs []Job
 }
 
-func (p *planner) readDir() error {
-	entries, err := afero.ReadDir(p.fsys, p.dir)
+// scan lists dir once: its images become jobs and, under Recursive, its
+// subdirectories are scanned in turn. One listing per directory and one per
+// output directory is what keeps a network mount bearable.
+func (p *planner) scan(dir string) error {
+	entries, err := afero.ReadDir(p.fsys, dir)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", p.dir, err)
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+
+	existing, err := p.existing(dir)
+	if err != nil {
+		return err
 	}
 
 	for _, e := range entries {
-		if !e.Mode().IsRegular() {
-			continue
-		}
-
-		if err := p.add(filepath.Join(p.dir, e.Name())); err != nil {
+		if err := p.visit(dir, e, existing); err != nil {
 			return err
 		}
 	}
@@ -126,24 +125,47 @@ func (p *planner) readDir() error {
 	return nil
 }
 
-func (p *planner) walk(path string, info fs.FileInfo, err error) error {
-	if err != nil {
-		return err
-	}
-
-	if info.IsDir() {
-		if path != p.dir && p.skipDir(info.Name()) {
-			return filepath.SkipDir
+func (p *planner) visit(dir string, e fs.FileInfo, existing map[string]bool) error {
+	switch {
+	case e.IsDir():
+		if !p.o.Recursive || p.skipDir(e.Name()) {
+			return nil
 		}
 
-		return nil
+		return p.scan(filepath.Join(dir, e.Name()))
+	case e.Mode().IsRegular():
+		p.add(dir, e, existing)
+	default:
 	}
 
-	if !info.Mode().IsRegular() {
-		return nil
+	return nil
+}
+
+// existing names what the output directory already holds, so that checking
+// each image costs a map lookup instead of a stat. A missing output directory
+// holds nothing; Force makes the question moot.
+func (p *planner) existing(photoDir string) (map[string]bool, error) {
+	names := map[string]bool{}
+	if p.o.Force {
+		return names, nil
 	}
 
-	return p.add(path)
+	out := p.outDir(photoDir)
+
+	entries, err := afero.ReadDir(p.fsys, out)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return names, nil
+		}
+
+		return nil, fmt.Errorf("read %s: %w", out, err)
+	}
+
+	for _, e := range entries {
+		names[e.Name()] = true
+	}
+
+	return names, nil
 }
 
 // skipDir keeps the walk out of hidden directories, RawTherapee's converted/
@@ -171,29 +193,21 @@ func (p *planner) outDir(photoDir string) string {
 	}
 }
 
-func (p *planner) add(path string) error {
-	if !isImage(path) {
-		return nil
+func (p *planner) add(dir string, e fs.FileInfo, existing map[string]bool) {
+	if !isImage(e.Name()) {
+		return
 	}
 
-	out := filepath.Join(p.outDir(filepath.Dir(path)), p.o.Prefix+filepath.Base(path))
+	name := p.o.Prefix + e.Name()
+	path := filepath.Join(dir, e.Name())
 
-	if !p.o.Force {
-		exists, err := afero.Exists(p.fsys, out)
-		if err != nil {
-			return fmt.Errorf("stat %s: %w", out, err)
-		}
+	if existing[name] {
+		p.report(path, "output exists")
 
-		if exists {
-			p.report(path, "output exists")
-
-			return nil
-		}
+		return
 	}
 
-	p.jobs = append(p.jobs, Job{In: path, Out: out})
-
-	return nil
+	p.jobs = append(p.jobs, Job{In: path, Out: filepath.Join(p.outDir(dir), name)})
 }
 
 func (p *planner) report(path, reason string) {
