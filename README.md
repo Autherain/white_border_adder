@@ -37,9 +37,14 @@ delete  20260620_toulouse       64 files, 633 MB
 keep    20260701_portait_marie  21 files, 317 MB  --exclude *marie*
 delete  20260810_suisse         14 files, 156 MB
 keep    20260810_suisse         99 files, 1.8 GB  --exclude _13409*
+skip    20260811_liechtenstein  124 raws, 2.4 GB, no converted/: not sorted yet
 ####### 71 files flagged: has a .pp3 but nothing in converted/
 182 files, 2.2 GB, 169 files, 2.9 GB kept. Re-run with --apply to delete them.
 ```
+
+A `skip` line is a directory `clean` refused to look into because it has no
+`converted/`: sort it in RawTherapee first. When nothing would run, the last
+line says `nothing to do` instead of inviting you to `--apply`.
 
 Nothing is written or deleted until you add `--apply`, which does the
 plan, prints the same lines in the past tense and the same recap. Errors

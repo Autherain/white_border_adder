@@ -79,14 +79,14 @@ func (a *app) runBorder(ctx context.Context, dir string, o border.Options, worke
 		items = append(items, item{dir: rel(dir, filepath.Dir(j.In)), files: []string{rel(dir, j.Out)}})
 	}
 
-	chosen := a.show(ctx, verbWrite, items)
+	chosen := a.show(ctx, verbWrite, items, nil)
 	if len(chosen) == 0 {
 		return nil
 	}
 
 	failed := a.writeAll(ctx, dir, pickFrom(jobs, chosen), o, workers)
 
-	for _, line := range recap(verbWrite, items, finished) {
+	for _, line := range recap(verbWrite, items, nil, finished) {
 		log.Infof(ctx, "%s", line)
 	}
 

@@ -215,11 +215,12 @@ func TestPlan(t *testing.T) {
 			fs := newTree(t, tt.tree)
 			before := paths(t, fs)
 
-			all, err := Plan(context.Background(), fs, tt.dir, tt.opts)
+			result, err := Plan(context.Background(), fs, tt.dir, tt.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
 
+			all := result.Candidates
 			got := toDelete(all)
 
 			if gotPaths := candidatePaths(got); !reflect.DeepEqual(gotPaths, tt.want) {
@@ -277,7 +278,8 @@ func TestPlanSizes(t *testing.T) {
 		"paris/converted/x.jpg":  "jpeg",
 	})
 
-	got, err := Plan(context.Background(), fs, "paris", Options{Pattern: "*.rw2"})
+	result, err := Plan(context.Background(), fs, "paris", Options{Pattern: "*.rw2"})
+	got := result.Candidates
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,12 +358,18 @@ var rawTherapeeLayout = map[string]string{
 func TestPlanRawTherapeeLayout(t *testing.T) {
 	fs := newTree(t, rawTherapeeLayout)
 
-	all, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true})
+	result, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got := toDelete(all)
+	got := toDelete(result.Candidates)
+
+	// The shoot without converted/ is reported, with what waits in it.
+	wantSkipped := []Skipped{{Path: "2025/20250715_toulouse", Raws: 1, Size: 3}}
+	if !reflect.DeepEqual(result.Skipped, wantSkipped) {
+		t.Fatalf("skipped = %v, want %v", result.Skipped, wantSkipped)
+	}
 
 	// _1310721 is developed, 20250715_toulouse has no converted/, the JPEG
 	// shoot has no raws: only the two undeveloped Luchon raws remain.
@@ -393,10 +401,12 @@ func TestPlanExcludeDirectory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := newTree(t, rawTherapeeLayout)
 
-			all, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true, Exclude: tt.exclude})
+			result, err := Plan(context.Background(), fs, "2025", Options{Pattern: "*.rw2", Recursive: true, Exclude: tt.exclude})
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			all := result.Candidates
 
 			paths := []string{}
 			for _, c := range toDelete(all) {
@@ -456,10 +466,12 @@ func TestPlanOnly(t *testing.T) {
 				opts.Exclude = []string{"_1310726"}
 			}
 
-			all, err := Plan(context.Background(), fs, "2025", opts)
+			result, err := Plan(context.Background(), fs, "2025", opts)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			all := result.Candidates
 
 			paths := []string{}
 			for _, c := range toDelete(all) {

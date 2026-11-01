@@ -25,9 +25,16 @@ type item struct {
 	kept  string // "" runs; otherwise the --exclude glob that keeps it
 }
 
+// A skipped directory is one the verb refused to look into; the recap names
+// it so the reader knows the list is not the whole tree.
+type skipped struct {
+	dir    string
+	detail string
+}
+
 // show prints the plan and returns the indexes of the items to run: the ones
 // not kept with --apply, none otherwise, since showing the plan is then the job.
-func (a *app) show(ctx context.Context, verb string, items []item) []int {
+func (a *app) show(ctx context.Context, verb string, items []item, skips []skipped) []int {
 	if a.apply {
 		return toRun(items)
 	}
@@ -51,7 +58,7 @@ func (a *app) show(ctx context.Context, verb string, items []item) []int {
 		}
 	}
 
-	for _, line := range recap(verb, items, planned) {
+	for _, line := range recap(verb, items, skips, planned) {
 		log.Infof(ctx, "%s", line)
 	}
 
@@ -81,15 +88,16 @@ const (
 )
 
 // recap is the block a reader checks before and after --apply: per directory
-// what runs and what is kept, how many files deserve a look, then the totals.
-func recap(verb string, items []item, at stage) []string {
+// what runs, what is kept and what was skipped, how many files deserve a
+// look, then the totals.
+func recap(verb string, items []item, skips []skipped, at stage) []string {
 	groups := byDirectory(items)
 	run, kept := running(items), keptOf(items)
 
 	lines := []string{}
-	if len(groups) > 1 || len(kept) > 0 {
+	if len(groups) > 1 || len(kept) > 0 || len(skips) > 0 {
 		lines = append(lines, styleBold.Render(log.Banner+" recap"))
-		lines = append(lines, recapGroups(verb, groups, at)...)
+		lines = append(lines, recapGroups(verb, groups, skips, at)...)
 	}
 
 	if flagged := filter(run, func(it item) bool { return it.warn != "" }); len(flagged) > 0 {
@@ -104,6 +112,11 @@ func recap(verb string, items []item, at stage) []string {
 
 	if len(kept) > 0 {
 		total += ", " + summary(kept) + " kept"
+	}
+
+	// Nothing to run means no hint either: --apply would do nothing.
+	if len(run) == 0 {
+		return append(lines, styleBold.Render("nothing to do"+strings.TrimPrefix(total, summary(run))+"."))
 	}
 
 	if at == finished {
@@ -129,10 +142,14 @@ func ran(verb string, run []item) string {
 	return files(n) + " written"
 }
 
-func recapGroups(verb string, groups []group, at stage) []string {
+func recapGroups(verb string, groups []group, skips []skipped, at stage) []string {
 	width := 0
 	for _, g := range groups {
 		width = max(width, len(g.dir))
+	}
+
+	for _, sk := range skips {
+		width = max(width, len(sk.dir))
 	}
 
 	action := verb
@@ -151,6 +168,10 @@ func recapGroups(verb string, groups []group, at stage) []string {
 			lines = append(lines, styleFaint.Render(fmt.Sprintf("%-7s %-*s  %s  %s",
 				"keep", width, g.dir, summary(kept), strings.Join(reasons(kept), ", "))))
 		}
+	}
+
+	for _, sk := range skips {
+		lines = append(lines, styleFaint.Render(fmt.Sprintf("%-7s %-*s  %s", "skip", width, sk.dir, sk.detail)))
 	}
 
 	return lines
