@@ -162,7 +162,8 @@ is right (it stays); the folder of that day already under the year, so
 `20260620_toulouse` keeps its name; else a new `20260620`. Several folders
 for one day keep the photo where it is and list it in the recap.
 
-`--exclude <glob>` (repeatable) leaves alone, without even reading them, the
+Old Nikon photos, `DSC_*` and any folder with `nikon` in its name, are
+always left alone: that filter is built in. `--exclude <glob>` (repeatable) leaves alone, without even reading them, the
 photos whose name without extension matches, or that have a directory of their
 path matching: `--exclude 'DSC_*'` for old Nikon numbering, `--exclude
 '*nikon*'` for a folder. `--verbose` prints what it left out.

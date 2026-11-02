@@ -292,6 +292,23 @@ func TestExcludeLeavesPhotosAndDirectoriesAlone(t *testing.T) {
 	}
 }
 
+func TestOldNikonPhotosNeverMove(t *testing.T) {
+	t.Parallel()
+
+	fs := newTree(t, map[string]string{
+		"r/dump/DSC_0001.NEF": shot("0801"), "r/dump/Nikon D70/a.jpg": shot("0801"),
+	})
+
+	moves, err := Plan(context.Background(), fs, "r", []string{"r/dump"}, Options{Recursive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(moves) != 0 {
+		t.Errorf("got %q, want nothing", lines(moves))
+	}
+}
+
 func TestExcludeRejectsAMalformedGlob(t *testing.T) {
 	t.Parallel()
 

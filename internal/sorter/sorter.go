@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,10 @@ import (
 	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 )
+
+// alwaysExcluded are the old Nikon photos: their folders and numbering are
+// already the way the owner wants them, and no run may move them.
+var alwaysExcluded = []string{"DSC_*", "*nikon*"}
 
 type Options struct {
 	Recursive bool
@@ -110,6 +115,8 @@ func Plan(ctx context.Context, fs afero.Fs, root string, sources []string, o Opt
 	if err := glob.Validate(o.Exclude...); err != nil {
 		return nil, err
 	}
+
+	o.Exclude = append(slices.Clone(o.Exclude), alwaysExcluded...)
 
 	photos, err := find(fs, sources, o)
 	if err != nil {

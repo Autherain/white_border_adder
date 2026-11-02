@@ -44,7 +44,8 @@ move with it, into <day folder>/converted/. converted/ and bordered/ are
 never scanned as photos, and bordered/ is never moved: it is not original. Nothing is
 overwritten, and emptied folders are left in place.
 
---exclude leaves alone every photo whose name without extension matches the
+Old Nikon photos (DSC_* and any folder with nikon in its name) are always
+left alone, without the flag. --exclude leaves alone every photo whose name without extension matches the
 glob, or that has a directory in its path matching it, and does not even read
 it: --exclude 'DSC_*' for the old Nikon numbering, --exclude '*nikon*' for a
 whole folder. Repeat it for several; case does not matter. Add --verbose to
