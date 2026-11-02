@@ -37,7 +37,8 @@ dry run first, especially before "clean", which deletes files.
 
   wba clean <dir>             list the raws that would be deleted
   wba clean <dir> --apply     delete them
-  wba clean --help            what "developed" and "candidate" mean`,
+  wba clean --help            what "developed" and "candidate" mean
+  wba sort <dir> --recursive  list the photos that would move to <year>/<day folder>`,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 			// Flags are parsed by now: a failure from here on is a runtime
@@ -60,7 +61,7 @@ dry run first, especially before "clean", which deletes files.
 	flags.BoolVar(&a.recursive, "recursive", false, "walk the tree below <dir>")
 	flags.BoolVar(&a.verbose, "verbose", false, "also print skipped items and why")
 
-	root.AddCommand(a.borderCmd(), a.cleanCmd(), versionCmd())
+	root.AddCommand(a.borderCmd(), a.cleanCmd(), a.sortCmd(), versionCmd())
 
 	return root
 }

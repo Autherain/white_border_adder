@@ -6,6 +6,7 @@ Panasonic raws that RawTherapee never developed.
 ```
 wba border <dir>            # write <dir>/bordered/bordered_<name>.jpg for every JPEG and PNG
 wba clean <dir>             # delete raws without a developed copy in <dir>/converted/
+wba sort <dir>              # file photos under <dir>/<year>/<day folder> by shot date
 wba <verb> <dir> --apply    # verbs only print what they would do until you add --apply
 ```
 
@@ -144,6 +145,40 @@ After:
 
 `IMG_1280.RW2` stays because `converted/IMG_1280.jpg` starts with its stem,
 and its sidecar stays with it.
+
+## wba sort <dir> [source...]
+
+Files every photo under `<dir>/<year>/<day folder>` by the date it was shot.
+Run it on the directory that holds your `2025/` and `2026/` folders, or from
+inside one of them (a `<dir>` named like a year is searched alone, and photos
+of another year leave it for that year's folder); with no `[source]` it re-files everything below `<dir>` (use `--recursive`), which
+fixes photos moved into the wrong day folder. Give a `[source]` (a dump of
+unsorted photos, inside or outside `<dir>`) to file only what is in it.
+
+The date is the EXIF date the camera wrote in the file, read from its first
+256 kB; a file without one falls back to its modification time. The day
+folder is, in order: the dated folder the photo already sits in when its date
+is right (it stays); the folder of that day already under the year, so
+`20260620_toulouse` keeps its name; else a new `20260620`. Several folders
+for one day keep the photo where it is and list it in the recap.
+
+`--exclude <glob>` (repeatable) leaves alone, without even reading them, the
+photos whose name without extension matches, or that have a directory of their
+path matching: `--exclude 'DSC_*'` for old Nikon numbering, `--exclude
+'*nikon*'` for a folder. `--verbose` prints what it left out.
+
+Raws, JPEG and PNG move. A raw's `.pp3` and its developed copies in
+`converted/` (`IMG_1264.jpg`, `IMG_1264-2.png` for `IMG_1264.RW2`, but not
+`IMG_12645.jpg`) go with it into `<day folder>/converted/`. `converted/` and
+`bordered/` are never scanned as photos and `bordered/` never moves. Nothing is overwritten, emptied folders
+stay.
+
+```
+$ wba sort ~/photos ~/photos/dump --recursive
+would move dump/IMG_1.RW2 -> 2026/20260620_toulouse/IMG_1.RW2
+would move dump/IMG_1.RW2.pp3 -> 2026/20260620_toulouse/IMG_1.RW2.pp3
+2 files. Re-run with --apply to move them.
+```
 
 ## Install
 
