@@ -1,6 +1,7 @@
 package border
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ const (
 	defaultOut = "bordered"
 	extPNG     = ".png"
 	dirPerm    = 0o755
+	filePerm   = 0o644
 	// A border ratio applies to both edges of an axis.
 	sides = 2
 )
@@ -80,18 +82,18 @@ func (j Job) Run(fsys afero.Fs, o Options) error {
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
-	out, err := fsys.Create(j.Out)
-	if err != nil {
-		return fmt.Errorf("create output file: %w", err)
-	}
-
-	if err := encode(out, j.Out, canvas, o.JPEGQuality); err != nil {
-		_ = out.Close()
-
+	// Encoded in memory and written in one call: a network mount pays a round
+	// trip per write, and the encoders write in small chunks.
+	var buf bytes.Buffer
+	if err := encode(&buf, j.Out, canvas, o.JPEGQuality); err != nil {
 		return fmt.Errorf("encode output image: %w", err)
 	}
 
-	return out.Close()
+	if err := afero.WriteFile(fsys, j.Out, buf.Bytes(), filePerm); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+
+	return nil
 }
 
 type planner struct {
@@ -234,12 +236,13 @@ func isImage(path string) bool {
 }
 
 func decode(fsys afero.Fs, path string) (image.Image, error) {
-	in, err := fsys.Open(path)
+	// The whole file in one read, for the same reason as the single write.
+	data, err := afero.ReadFile(fsys, path)
 	if err != nil {
-		return nil, fmt.Errorf("open input file: %w", err)
+		return nil, fmt.Errorf("read input file: %w", err)
 	}
 
-	defer func() { _ = in.Close() }()
+	in := bytes.NewReader(data)
 
 	var img image.Image
 

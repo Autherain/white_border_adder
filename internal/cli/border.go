@@ -99,23 +99,21 @@ type result struct {
 }
 
 func (a *app) writeAll(ctx context.Context, dir string, jobs []border.Job, o border.Options, workers int) int {
-	results := runAll(workers, jobs, func(j border.Job) result {
-		return result{job: j, err: j.Run(a.fs, o)}
-	})
-
 	failed := 0
 
-	for _, r := range results {
+	runEach(workers, jobs, func(j border.Job) result {
+		return result{job: j, err: j.Run(a.fs, o)}
+	}, func(r result) {
 		if r.err != nil {
 			failed++
 
 			log.Errorf(ctx, "%s: %v", rel(dir, r.job.In), r.err)
 
-			continue
+			return
 		}
 
 		log.Infof(ctx, "%s %s", styleDone.Render("wrote"), rel(dir, r.job.Out))
-	}
+	})
 
 	return failed
 }

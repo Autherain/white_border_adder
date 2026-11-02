@@ -12,6 +12,7 @@ import (
 const (
 	verbDelete = "delete"
 	verbWrite  = "write"
+	verbMove   = "move"
 )
 
 // An item is one planned action: the files it touches, relative to the
@@ -135,11 +136,14 @@ func ran(verb string, run []item) string {
 		total += it.size
 	}
 
-	if verb == verbDelete {
+	switch verb {
+	case verbDelete:
 		return files(n) + " deleted, " + human(total) + " freed"
+	case verbMove:
+		return files(n) + " moved"
+	default:
+		return files(n) + " written"
 	}
-
-	return files(n) + " written"
 }
 
 func recapGroups(verb string, groups []group, skips []skipped, at stage) []string {

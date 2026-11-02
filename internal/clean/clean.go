@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/alitto/pond/v2"
+	"github.com/evaneecloo/white_border_adder/internal/glob"
 	"github.com/evaneecloo/white_border_adder/internal/log"
 	"github.com/spf13/afero"
 )
@@ -87,12 +88,8 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) (Result, erro
 		return Result{}, fmt.Errorf("%s: not a directory", dir)
 	}
 
-	// path.Match only reports a malformed pattern when it reaches the bad part, so a
-	// probe against an empty name validates every pattern before any listing happens.
-	for _, glob := range append(append([]string{o.Pattern}, o.Exclude...), o.Only...) {
-		if _, err := path.Match(glob, ""); err != nil {
-			return Result{}, fmt.Errorf("%q: %w", glob, err)
-		}
+	if err := glob.Validate(append(append([]string{o.Pattern}, o.Exclude...), o.Only...)...); err != nil {
+		return Result{}, err
 	}
 
 	result, err := scanTree(ctx, fs, dir, o)
@@ -322,31 +319,12 @@ func isDeveloped(stem string, converted []string) bool {
 // kept is the reason a candidate stays: an --exclude glob it matches, or no
 // --only glob matching it when --only is given. "" means it goes.
 func kept(rel string, o Options) string {
-	if glob := matching(rel, o.Exclude); glob != "" {
+	if glob := glob.Matching(rel, o.Exclude); glob != "" {
 		return "--exclude " + glob
 	}
 
-	if len(o.Only) > 0 && matching(rel, o.Only) == "" {
+	if len(o.Only) > 0 && glob.Matching(rel, o.Only) == "" {
 		return "not in --only " + strings.Join(o.Only, " ")
-	}
-
-	return ""
-}
-
-// matching returns the first glob matching the raw's name without extension,
-// a directory of its path below the argument, or that whole path, so
-// "IMG_12*" targets a photo and "*marie*" targets a shoot.
-func matching(rel string, globs []string) string {
-	rel = strings.ToLower(filepath.ToSlash(rel))
-	stem := strings.TrimSuffix(rel, path.Ext(rel))
-	names := append(strings.Split(stem, "/"), stem)
-
-	for _, glob := range globs {
-		for _, name := range names {
-			if ok, _ := path.Match(strings.ToLower(glob), name); ok {
-				return glob
-			}
-		}
 	}
 
 	return ""
