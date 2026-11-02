@@ -1,8 +1,6 @@
 module github.com/evaneecloo/white_border_adder
 
-go 1.23.0
-
-toolchain go1.23.5
+go 1.27.3
 
 require (
 	github.com/alitto/pond/v2 v2.7.3
