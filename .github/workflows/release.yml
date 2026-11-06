@@ -9,26 +9,27 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - { goos: windows, goarch: amd64, ext: .exe }
-          - { goos: linux, goarch: amd64, ext: "" }
-          - { goos: darwin, goarch: arm64, ext: "" }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, ext: "", name: wba-linux-amd64 }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: .exe, name: wba-windows-amd64.exe }
+          - { os: macos-latest, target: aarch64-apple-darwin, ext: "", name: wba-darwin-arm64 }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          go-version-file: go.mod
-      - run: >
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
-          go build -ldflags "-s -w -X github.com/evaneecloo/white_border_adder/internal/cli.version=${{ github.ref_name }}"
-          -o wba-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/wba
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+        env:
+          WBA_VERSION: ${{ github.ref_name }}
+      - run: cp target/${{ matrix.target }}/release/wba${{ matrix.ext }} ${{ matrix.name }}
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
-          name: wba-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: wba-*
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
 
   release:
     needs: build

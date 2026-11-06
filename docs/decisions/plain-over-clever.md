@@ -1,8 +1,7 @@
 # Plain control flow over combinator chains
 
 Rust lets a function be one expression of `.and_then().map_or_else()`.
-This code does not do that: the reader comes from Go and wants to see the
-branches.
+This code does not do that: the reader wants to see the branches.
 
 Rules applied to the production code:
 
@@ -13,22 +12,20 @@ Rules applied to the production code:
   `.iter().filter(p).count()` are fine, two closures in a row are not.
 - Closures are for the thing that is a callback (`run_each`, `sort_by`,
   `dated(name)`), never a way to skip naming a variable.
-- Tests use `.unwrap()` where Go would `t.Fatal(err)`.
+- Tests use `.unwrap()`: a fixture that fails to build is a broken test,
+  not a case to handle.
 
-The one idiom to learn is `?`:
+The one idiom to lean on is `?`:
 
 ```rust
 let head = read_head(path)?;        // Option: return None if read_head did
 let entries = dir.read_dir()?;      // Result: return Err(e.into()) if it failed
 ```
 
-It is Go's `if err != nil { return err }` on one character, and it also
-works on `Option`, where Go would write `if !ok { return x, false }`.
+Three shapes come back often:
 
-Three conversions come back often:
-
-| Rust | Go |
+| Shape | Meaning |
 |---|---|
-| `let Ok(x) = f() else { return None };` | `x, err := f(); if err != nil { return 0, false }` |
-| `let Some(x) = opt else { continue };` | `x, ok := m[k]; if !ok { continue }` |
-| `match f() { Ok(x) => x, Err(e) => return Err(e.into()) }` | `x, err := f(); if err != nil { return fmt.Errorf("...: %w", err) }` |
+| `let Ok(x) = f() else { return None };` | the error is not worth reporting here, the caller sees "nothing" |
+| `let Some(x) = opt else { continue };` | skip this item and go on |
+| `match f() { Ok(x) => x, Err(e) => return Err(e.into()) }` | the error is wrapped in this module's own error type |

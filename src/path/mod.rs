@@ -14,8 +14,7 @@ pub fn below<'p>(base: &VfsPath, path: &'p VfsPath) -> Option<Vec<&'p str>> {
     (!rest.is_empty()).then(|| rest.split('/').collect())
 }
 
-/// `path` relative to `base`, as Go's filepath.Rel prints it: "." for the
-/// base itself, "../x" for a sibling.
+/// `path` relative to `base`: "." for the base itself, "../x" for a sibling.
 pub fn relative(base: &VfsPath, path: &VfsPath) -> String {
     let from: Vec<&str> = segments(base.as_str());
     let to: Vec<&str> = segments(path.as_str());
@@ -37,8 +36,7 @@ fn segments(path: &str) -> Vec<&str> {
     path.split('/').filter(|s| !s.is_empty()).collect()
 }
 
-/// The name without its extension, Go's `strings.TrimSuffix(name, path.Ext(name))`:
-/// `IMG_1264.RW2.pp3` is `IMG_1264.RW2`.
+/// The name without its last extension: `IMG_1264.RW2.pp3` is `IMG_1264.RW2`.
 pub fn stem(name: &str) -> &str {
     match name.rfind('.') {
         Some(dot) => &name[..dot],

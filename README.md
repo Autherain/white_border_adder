@@ -184,10 +184,10 @@ would move dump/IMG_1.RW2.pp3 -> 2026/20260620_toulouse/IMG_1.RW2.pp3
 
 ## Install
 
-With Go installed, on any OS:
+With a Rust toolchain (1.88 or later), on any OS:
 
 ```
-go install github.com/evaneecloo/white_border_adder/cmd/wba@latest
+cargo install --git https://github.com/Autherain/white_border_adder
 ```
 
 Or take `wba-windows-amd64.exe`, `wba-linux-amd64` or `wba-darwin-arm64`
@@ -214,12 +214,14 @@ Paths work with either slash: `wba clean D:\photos\2024-10-paris` and
 ### From source
 
 ```
-make build            # ./wba for the current OS
-make build-windows    # ./wba.exe, from Linux or macOS
+make build            # target/release/wba, versioned with git describe
 make install          # ~/.local/bin/wba plus zsh and bash completion files
 make test
-make lint             # needs golangci-lint v2
+make lint             # cargo fmt --check and clippy, warnings are errors
 ```
+
+A Windows binary is built on Windows with the same `cargo build --release`;
+the release workflow does that for the three platforms on every `v*` tag.
 
 ### Shell completion
 
@@ -233,3 +235,26 @@ PowerShell on Windows, add to your `$PROFILE`:
 ```
 wba completion powershell | Out-String | Invoke-Expression
 ```
+
+## Code
+
+One crate, one module per concern, every module a directory as `src/clean/mod.rs`
+plus the files next to it.
+
+| Module | What it holds |
+|---|---|
+| `src/main.rs` | the only place that touches the OS filesystem, and the `mod` list. |
+| `src/cli/` | clap verbs, `show`, output lines, exit codes. No business logic. |
+| `src/border/` | `plan` and `Job::run`. The only module that uses `image`. |
+| `src/clean/` | `plan` and `Candidate::delete`. |
+| `src/sorter/` | `plan`, `Move::run`, the EXIF head reader. |
+| `src/log/` | the `Log` trait, `Lines` for real output, `MockLog` under `cargo test`. |
+| `src/glob/` | `Glob`, parsed once by clap so a plan never meets a bad one. |
+| `src/runeach/` | `run_each`: a bounded pool, results in completion order, no dependency. |
+| `src/path/` | paths relative to the argument, stem and extension. |
+| `src/testfs/` | the in-memory fixture every test builds, compiled only under `cargo test`. |
+
+A verb plans, then each element of the plan acts: `job.run(o)`,
+`candidate.delete()`, `mv.run()` take `self`, so nothing runs twice, and the
+plan never writes. Every module reads and writes through a `vfs::VfsPath`,
+a `MemoryFS` in tests; see `docs/decisions/`.

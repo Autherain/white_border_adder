@@ -63,7 +63,8 @@ pub fn render(img: Decoded, o: &Options) -> Result<RgbaImage, Error> {
     Ok(canvas)
 }
 
-/// Bilinear, as the Go's draw.ApproxBiLinear, on SIMD lanes.
+/// Bilinear on SIMD lanes: the photo only ever shrinks, so a wider filter
+/// buys nothing visible.
 fn resize(img: Decoded, width: u32, height: u32) -> Result<RgbaImage, Error> {
     let kind = if img.alpha {
         PixelType::U8x4

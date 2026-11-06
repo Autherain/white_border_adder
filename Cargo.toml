@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-repository = "https://github.com/evaneecloo/white_border_adder"
+repository = "https://github.com/Autherain/white_border_adder"
 description = "White borders for Instagram and cleanup of undeveloped raws"
 
 [dependencies]

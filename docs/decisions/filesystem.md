@@ -1,10 +1,11 @@
 # One virtual filesystem, rooted at the top
 
-Every crate under `crates/` reads and writes through `vfs::VfsPath`, the
-closest thing Rust has to afero: a path that carries its filesystem, with a
-`MemoryFS` for tests and a `PhysicalFS` for the real thing.
+Every module under `src/` reads and writes through `vfs::VfsPath`: a path
+that carries its filesystem, with a `MemoryFS` for tests and a `PhysicalFS`
+for the real thing. No `std::fs` outside `main.rs`, so a test can assert a
+deletion without touching the disk.
 
-`vfs` differs from afero in two ways that shaped the code.
+Two properties of `vfs` shaped the code.
 
 **Paths are relative to the filesystem root, with `/`.** A `PhysicalFS`
 rooted at `photos/` cannot name `photos/../2025`, which `sort` needs when run
@@ -12,7 +13,7 @@ from inside a year folder, nor an absolute `--out`. So `main` roots the one
 `PhysicalFS` at the top of the disk (`/`, or the drive on Windows) and
 `locate` turns every argument into an absolute path on it. A move between a
 `[source]` and `<dir>` is then a rename on the same filesystem, never a copy.
-Printed paths come from `wba_path::relative`, which gives the user back the
+Printed paths come from `path::relative`, which gives the user back the
 path the way they typed the argument.
 
 **`VfsPath` is cheap to clone but not `Ord` or `Hash`.** It is an `Arc` to

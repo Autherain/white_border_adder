@@ -41,7 +41,8 @@ impl fmt::Display for Glob {
     }
 }
 
-// Go's path.Match: case folded by the callers, `*` never crosses a `/`.
+// Case folded by the callers; `*` never crosses a `/`, so a glob on a stem
+// cannot match across directories.
 const OPTIONS: MatchOptions = MatchOptions {
     case_sensitive: false,
     require_literal_separator: true,

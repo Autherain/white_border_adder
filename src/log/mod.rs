@@ -43,8 +43,7 @@ impl<O: Write + Send, E: Write + Send> Lines<O, E> {
     }
 }
 
-// A write that fails has nowhere to be reported, so it is dropped, as Go's
-// fmt.Fprintln callers drop theirs.
+// A write that fails has nowhere to be reported, so it is dropped.
 fn put(w: &Mutex<impl Write>, line: &str) {
     let mut w = w.lock().unwrap_or_else(PoisonError::into_inner);
     let _ = writeln!(w, "{line}");

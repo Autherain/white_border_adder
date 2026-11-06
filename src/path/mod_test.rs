@@ -27,7 +27,7 @@ fn below_splits_the_components_under_the_base() {
 }
 
 #[test]
-fn relative_reads_like_go() {
+fn relative_prints_dot_and_dotdot() {
     assert_eq!(relative(&at("r"), &at("r/d/a.png")), "d/a.png");
     assert_eq!(relative(&at("r"), &at("r")), ".");
     assert_eq!(relative(&at(""), &at("paris/a.rw2")), "paris/a.rw2");

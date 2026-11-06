@@ -4,8 +4,8 @@
 //! EXIF crate is used: kamadak-exif rejects it.
 //!
 //! Every function answers `Option`: `None` is "no date here", whatever the
-//! reason, and `?` on an `Option` returns `None` at once, the way Go code
-//! returns `(0, false)`. The bytes come from a file we do not control, so
+//! reason, and `?` on an `Option` returns `None` at once. The bytes come
+//! from a file we do not control, so
 //! every read goes through `get(..)`, which is `None` past the end, never a
 //! panic.
 
