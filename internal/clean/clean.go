@@ -29,6 +29,8 @@ type Options struct {
 	Exclude   []string
 	Only      []string
 	Recursive bool
+	// Bordered adds the white-bordered Instagram copies to the plan.
+	Bordered bool
 }
 
 type Candidate struct {
@@ -40,6 +42,8 @@ type Candidate struct {
 	// *suisse*"), "" when it goes. Kept candidates stay in the plan so the
 	// caller can say what was spared.
 	Kept string
+	// Bordered marks an Instagram copy rather than a raw; it has no sidecar.
+	Bordered bool
 }
 
 // A Skipped directory holds raws but no converted/, so no sorting happened
@@ -75,7 +79,19 @@ func (c Candidate) Delete(fs afero.Fs) error {
 		}
 	}
 
+	if c.Bordered && len(errs) == 0 {
+		removeIfEmpty(fs, filepath.Dir(c.Path))
+	}
+
 	return errors.Join(errs...)
+}
+
+// removeIfEmpty tidies the bordered/ folder once its last copy is gone; what
+// is left in it (a file kept by --exclude, a note of yours) keeps it alive.
+func removeIfEmpty(fs afero.Fs, dir string) {
+	if entries, err := afero.ReadDir(fs, dir); err == nil && len(entries) == 0 {
+		_ = fs.Remove(dir)
+	}
 }
 
 func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) (Result, error) {
@@ -112,7 +128,23 @@ func Plan(ctx context.Context, fs afero.Fs, dir string, o Options) (Result, erro
 // skipped names the directories a recursive walk never enters: hidden ones and
 // RawTherapee's output, which holds no raws of its own.
 func skipped(name string) bool {
-	return strings.HasPrefix(name, ".") || name == convertedDir
+	return strings.HasPrefix(name, ".") || name == convertedDir || isBorderedDir(name)
+}
+
+// bordered is where wba border writes; bordered_images is where the script
+// that preceded it did. border enters converted/, so its output lands in
+// converted/bordered/ as often as in bordered/.
+func isBorderedDir(name string) bool {
+	return name == "bordered" || name == "bordered_images"
+}
+
+func isImage(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".jpg", ".jpeg", ".png":
+		return true
+	default:
+		return false
+	}
 }
 
 // A slow mount (a cloud drive over 9p) makes every listing a round trip, so
@@ -204,10 +236,20 @@ func scan(fs afero.Fs, dir string, o Options) (listed, error) {
 
 	got := listed{dir: dir}
 
-	if developed, ok := convertedNames(fs, dir, listing[convertedDir]); ok {
+	developed, inConverted, ok := convertedNames(fs, dir, listing[convertedDir])
+	if ok {
 		got.candidates = candidatesIn(dir, entries, listing, developed, o)
 	} else {
 		got.skipped = waiting(dir, entries, o)
+	}
+
+	if o.Bordered {
+		copies, err := borderedIn(fs, dir, entries, inConverted)
+		if err != nil {
+			return listed{}, err
+		}
+
+		got.candidates = append(got.candidates, copies...)
 	}
 
 	if !o.Recursive {
@@ -221,6 +263,36 @@ func scan(fs afero.Fs, dir string, o Options) (listed, error) {
 	}
 
 	return got, nil
+}
+
+// borderedIn lists the Instagram copies of a directory: those in its own
+// bordered/ and in converted/bordered/, images only so that a note left there
+// is never deleted.
+func borderedIn(fs afero.Fs, dir string, entries []os.FileInfo, inConverted []string) ([]Candidate, error) {
+	dirs := inConverted
+
+	for _, entry := range entries {
+		if entry.IsDir() && isBorderedDir(entry.Name()) {
+			dirs = append(dirs, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	copies := []Candidate{}
+
+	for _, d := range dirs {
+		files, err := afero.ReadDir(fs, d)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, f := range files {
+			if f.Mode().IsRegular() && isImage(f.Name()) {
+				copies = append(copies, Candidate{Path: filepath.Join(d, f.Name()), Size: f.Size(), Bordered: true})
+			}
+		}
+	}
+
+	return copies, nil
 }
 
 // waiting counts the raws of a directory clean will not touch, so the recap
@@ -284,26 +356,30 @@ func candidateFor(dir string, entry os.FileInfo, listing map[string]os.FileInfo,
 }
 
 // convertedNames lists the lowercased names of the regular files in converted/,
-// given its entry from the parent listing; false means "not a photo directory".
-func convertedNames(fs afero.Fs, dir string, converted os.FileInfo) ([]string, bool) {
+// given its entry from the parent listing, and the bordered folders it holds;
+// false means "not a photo directory".
+func convertedNames(fs afero.Fs, dir string, converted os.FileInfo) ([]string, []string, bool) {
 	if converted == nil || !converted.IsDir() {
-		return nil, false
+		return nil, nil, false
 	}
 
 	entries, err := afero.ReadDir(fs, filepath.Join(dir, convertedDir))
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 
-	names := []string{}
+	names, borderedDirs := []string{}, []string{}
 
 	for _, entry := range entries {
-		if entry.Mode().IsRegular() {
+		switch {
+		case entry.Mode().IsRegular():
 			names = append(names, strings.ToLower(entry.Name()))
+		case entry.IsDir() && isBorderedDir(entry.Name()):
+			borderedDirs = append(borderedDirs, filepath.Join(dir, convertedDir, entry.Name()))
 		}
 	}
 
-	return names, true
+	return names, borderedDirs, true
 }
 
 func isDeveloped(stem string, converted []string) bool {

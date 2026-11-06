@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use vfs::{VfsError, VfsFileType, VfsMetadata, VfsPath};
 
 use super::{CONVERTED_DIR, Candidate, File, Kept, Options, Plan, SIDECAR_EXT, Skipped};
+use crate::border::{DEFAULT_OUT, LEGACY_OUT, is_image};
 use crate::glob;
 use crate::log::Log;
 use crate::path::{relative, stem};
@@ -125,15 +126,29 @@ fn scan(dir: &VfsPath, o: &Options) -> Result<Listed, VfsError> {
         skipped: None,
     };
 
-    match converted_names(by_name.get(CONVERTED_DIR).copied()) {
-        Some(developed) => {
+    let converted = converted_names(by_name.get(CONVERTED_DIR).copied());
+    match &converted {
+        Some(c) => {
             for e in &entries {
-                if let Some(c) = candidate(e, &by_name, &developed, o) {
+                if let Some(c) = candidate(e, &by_name, &c.names, o) {
                     got.candidates.push(c);
                 }
             }
         }
         None => got.skipped = Some(waiting(dir, &entries, o)),
+    }
+
+    if o.bordered {
+        let mut dirs = match converted {
+            Some(c) => c.bordered,
+            None => Vec::new(),
+        };
+        for e in &entries {
+            if e.is_dir() && is_bordered_dir(&e.path.filename()) {
+                dirs.push(e.path.clone());
+            }
+        }
+        got.candidates.extend(bordered_in(&dirs)?);
     }
 
     if o.recursive {
@@ -147,9 +162,37 @@ fn scan(dir: &VfsPath, o: &Options) -> Result<Listed, VfsError> {
     Ok(got)
 }
 
-/// Hidden directories and RawTherapee's output, which holds no raws of its own.
+/// Hidden directories, RawTherapee's output and wba's own, none of which
+/// holds raws.
 fn skipped_dir(name: &str) -> bool {
-    name.starts_with('.') || name == CONVERTED_DIR
+    name.starts_with('.') || name == CONVERTED_DIR || is_bordered_dir(name)
+}
+
+/// Where wba border writes, and where the script that preceded it did.
+fn is_bordered_dir(name: &str) -> bool {
+    name == DEFAULT_OUT || name == LEGACY_OUT
+}
+
+/// The Instagram copies in the bordered folders: images only, so that a note
+/// left there is never deleted.
+fn bordered_in(dirs: &[VfsPath]) -> Result<Vec<Candidate>, VfsError> {
+    let mut copies = Vec::new();
+    for d in dirs {
+        for e in entries(d)? {
+            if e.is_file() && is_image(&e.path.filename()) {
+                copies.push(Candidate {
+                    raw: File {
+                        path: e.path,
+                        size: e.meta.len,
+                    },
+                    sidecar: None,
+                    kept: None,
+                    bordered: true,
+                });
+            }
+        }
+    }
+    Ok(copies)
 }
 
 /// The raws clean will not touch, so the recap can say what sits there unsorted.
@@ -201,12 +244,21 @@ fn candidate(
         },
         sidecar,
         kept: None,
+        bordered: false,
     })
 }
 
-/// The lowercased names of the regular files in converted/, given its entry
-/// from the parent listing; `None` means "not a photo directory".
-fn converted_names(converted: Option<&Entry>) -> Option<Vec<String>> {
+struct Converted {
+    /// The lowercased names of its regular files.
+    names: Vec<String>,
+    /// The bordered folders inside it: border enters converted/, so its
+    /// output lands there as often as beside it.
+    bordered: Vec<VfsPath>,
+}
+
+/// What converted/ holds, given its entry from the parent listing; `None`
+/// means "not a photo directory".
+fn converted_names(converted: Option<&Entry>) -> Option<Converted> {
     let converted = converted?;
     if !converted.is_dir() {
         return None;
@@ -215,13 +267,18 @@ fn converted_names(converted: Option<&Entry>) -> Option<Vec<String>> {
         return None;
     };
 
-    let mut names = Vec::new();
+    let mut got = Converted {
+        names: Vec::new(),
+        bordered: Vec::new(),
+    };
     for e in entries {
         if e.is_file() {
-            names.push(e.path.filename().to_ascii_lowercase());
+            got.names.push(e.path.filename().to_ascii_lowercase());
+        } else if e.is_dir() && is_bordered_dir(&e.path.filename()) {
+            got.bordered.push(e.path);
         }
     }
-    Some(names)
+    Some(got)
 }
 
 /// Why a candidate stays: an --exclude glob it matches, or no --only glob

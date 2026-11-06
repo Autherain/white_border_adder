@@ -490,3 +490,110 @@ func TestPlanOnly(t *testing.T) {
 		})
 	}
 }
+
+func goes(t *testing.T, fs afero.Fs, o Options) []string {
+	t.Helper()
+
+	result, err := Plan(context.Background(), fs, "p", o)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := []string{}
+
+	for _, c := range result.Candidates {
+		if c.Kept == "" {
+			out = append(out, c.Path)
+		}
+	}
+
+	return out
+}
+
+func TestBorderedIsOptIn(t *testing.T) {
+	t.Parallel()
+
+	fs := newTree(t, map[string]string{"p/converted/a.jpg": "x", "p/bordered/bordered_a.jpg": "x"})
+
+	if got := goes(t, fs, Options{Pattern: "*.rw2", Recursive: true}); len(got) != 0 {
+		t.Errorf("got %v without --bordered", got)
+	}
+}
+
+func TestBorderedDeletesOnlyTheInstagramCopies(t *testing.T) {
+	t.Parallel()
+
+	fs := newTree(t, map[string]string{
+		"p/shoot/converted/a.jpg":                   "original",
+		"p/shoot/converted/bordered/bordered_a.jpg": "ig",
+		"p/shoot/bordered/bordered_b.png":           "ig",
+		"p/shoot/bordered/notes.txt":                "mine",
+		"p/shoot/bordered_images/c.JPG":             "ig",
+		"p/shoot/IMG_1.RW2":                         "raw",
+		"p/shoot/converted/IMG_1.jpg":               "developed",
+		"p/nosort/bordered/bordered_d.jpg":          "ig",
+		"p/shoot/.hidden/bordered/bordered_e.jpg":   "ig",
+	})
+
+	got := goes(t, fs, Options{Pattern: "*.rw2", Recursive: true, Bordered: true})
+	want := []string{
+		"p/nosort/bordered/bordered_d.jpg",
+		"p/shoot/bordered/bordered_b.png",
+		"p/shoot/bordered_images/c.JPG",
+		"p/shoot/converted/bordered/bordered_a.jpg",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestBorderedFollowsExclude(t *testing.T) {
+	t.Parallel()
+
+	fs := newTree(t, map[string]string{
+		"p/20260620_marie/converted/x.jpg":                   "x",
+		"p/20260620_marie/converted/bordered/bordered_x.jpg": "ig",
+		"p/20260701_lyon/converted/y.jpg":                    "y",
+		"p/20260701_lyon/converted/bordered/bordered_y.jpg":  "ig",
+	})
+
+	got := goes(t, fs, Options{Pattern: "*.rw2", Recursive: true, Bordered: true, Exclude: []string{"*marie*"}})
+
+	want := []string{"p/20260701_lyon/converted/bordered/bordered_y.jpg"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestDeletingBorderedCopiesRemovesTheEmptyFolderOnly(t *testing.T) {
+	t.Parallel()
+
+	fs := newTree(t, map[string]string{
+		"p/a/converted/bordered/bordered_1.jpg": "ig",
+		"p/b/bordered/bordered_2.jpg":           "ig",
+		"p/b/bordered/notes.txt":                "mine",
+		"p/a/converted/1.jpg":                   "original",
+	})
+
+	result, err := Plan(context.Background(), fs, "p", Options{Pattern: "*.rw2", Recursive: true, Bordered: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range result.Candidates {
+		if err := c.Delete(fs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if ok, _ := afero.DirExists(fs, "p/a/converted/bordered"); ok {
+		t.Error("the emptied bordered folder stayed")
+	}
+
+	for _, kept := range []string{"p/b/bordered/notes.txt", "p/a/converted/1.jpg"} {
+		if ok, _ := afero.Exists(fs, kept); !ok {
+			t.Errorf("%s was deleted", kept)
+		}
+	}
+}

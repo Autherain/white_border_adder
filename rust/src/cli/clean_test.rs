@@ -12,6 +12,7 @@ fn args(dir: &str, exclude: &[&str]) -> CleanArgs {
         pattern: "*.rw2".parse().unwrap(),
         exclude: exclude.iter().map(|g| g.parse().unwrap()).collect(),
         only: vec![],
+        bordered: false,
     }
 }
 
@@ -54,6 +55,34 @@ fn clean_dry_run_then_apply() {
             "apply={apply}"
         );
     }
+}
+
+#[test]
+fn bordered_copies_are_listed_under_their_folder() {
+    let root = new_tree(&[
+        ("paris/converted/IMG_1264.jpg", b"jpeg"),
+        ("paris/converted/bordered/bordered_IMG_1264.jpg", b"ig"),
+        ("paris/bordered/bordered_IMG_1265.jpg", b"ig"),
+    ]);
+    let app = test_app(false, Box::new(move |p| Ok(root.join(p)?)));
+
+    app.clean(CleanArgs {
+        bordered: true,
+        ..args("paris", &[])
+    })
+    .unwrap();
+
+    assert_eq!(
+        output(app),
+        "####### bordered: 1 file, 2 B\n\
+         would delete bordered/bordered_IMG_1265.jpg\n\
+         ####### converted/bordered: 1 file, 2 B\n\
+         would delete converted/bordered/bordered_IMG_1264.jpg\n\
+         ####### recap\n\
+         delete  bordered            1 file, 2 B\n\
+         delete  converted/bordered  1 file, 2 B\n\
+         2 files, 4 B. Re-run with --apply to delete them.\n"
+    );
 }
 
 #[test]

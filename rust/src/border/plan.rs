@@ -135,7 +135,7 @@ impl Planner<'_> {
     }
 }
 
-fn is_image(name: &str) -> bool {
+pub(crate) fn is_image(name: &str) -> bool {
     matches!(crate::path::ext(name).as_str(), ".jpg" | ".jpeg" | ".png")
 }
 

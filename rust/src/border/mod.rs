@@ -8,6 +8,7 @@ use std::io::{Cursor, Read, Write};
 use image::ImageFormat;
 use vfs::{VfsError, VfsPath};
 
+pub(crate) use plan::is_image;
 pub use plan::plan;
 use render::Decoded;
 

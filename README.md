@@ -98,6 +98,7 @@ Deletes the raws of `<dir>` that RawTherapee never developed.
 | `--pattern` | `*.rw2` | Glob on the file name that marks a raw. |
 | `--exclude` | none | Glob that keeps a raw when it matches its stem or any directory of its path below `<dir>`. Repeatable: `--exclude 'IMG_12*' --exclude IMG_1300 --exclude '*marie*'`. |
 | `--only` | none | The mirror: when given, only the raws matching one of its globs go, the rest is kept. `--only '*suisse*'` cleans one shoot out of a year. `--exclude` wins when both match. |
+| `--bordered` | false | Also delete the Instagram copies `wba border` wrote: the images in `bordered/` and `converted/bordered/` of every directory, and in the old `bordered_images/`. They go whether or not the photo they were made from still exists, and the folder goes once empty. `--exclude` and `--only` apply to them like to raws. |
 
 Taking a photo out of the list is `--exclude <stem>` on the next run, a
 whole shoot is `--exclude '<directory>'`, and cleaning one shoot only is

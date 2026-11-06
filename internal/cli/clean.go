@@ -34,6 +34,13 @@ What gets deleted, step by step:
      sidecar (IMG_1264.RW2.pp3) when there is one. The sidecar of a raw
      that stays, stays.
 
+--bordered adds the Instagram copies written by "wba border" to the list: the
+images in bordered/ and converted/bordered/ of every directory (and in the
+old bordered_images/), which are only there to be posted. They go whether or
+not the photo they were made from is still around, and the folder goes once
+empty. --exclude and --only apply to them like to raws, so --only '*suisse*'
+cleans the copies of one shoot. converted/ itself is never touched.
+
 Nothing is deleted without --apply: the default run prints one line per
 file, a banner per directory with its total, and the grand total.
 
@@ -61,6 +68,8 @@ what each kept, with sizes.`,
 	f.StringVar(&o.Pattern, "pattern", "*.rw2", "glob on the file name that marks a raw")
 	f.StringArrayVar(&o.Exclude, "exclude", nil,
 		"glob on a raw's name without extension or on a directory of its path, to keep; repeatable")
+	f.BoolVar(&o.Bordered, "bordered", false,
+		"also delete the white-bordered Instagram copies (bordered/, converted/bordered/, bordered_images/)")
 	f.StringArrayVar(&o.Only, "only", nil,
 		"same kind of glob; when given, only the raws it matches go, the rest is kept; repeatable")
 

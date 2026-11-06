@@ -18,6 +18,7 @@ fn options() -> Options {
         exclude: vec![],
         only: vec![],
         recursive: false,
+        bordered: false,
     }
 }
 
@@ -176,6 +177,70 @@ fn plan_then_delete() {
             ],
         },
         Case {
+            name: "bordered copies stay without --bordered",
+            tree: vec![
+                ("paris/converted/a.jpg", b"jpeg"),
+                ("paris/bordered/bordered_a.jpg", b"ig"),
+            ],
+            dir: "paris",
+            opts: Options {
+                recursive: true,
+                ..options()
+            },
+            want: vec![],
+            files: vec![],
+        },
+        Case {
+            name: "--bordered deletes only the Instagram copies",
+            tree: vec![
+                ("shoot/converted/a.jpg", b"original"),
+                ("shoot/converted/bordered/bordered_a.jpg", b"ig"),
+                ("shoot/bordered/bordered_b.png", b"ig"),
+                ("shoot/bordered/notes.txt", b"mine"),
+                ("shoot/bordered_images/c.JPG", b"ig"),
+                ("shoot/IMG_1.RW2", b"raw"),
+                ("shoot/converted/IMG_1.jpg", b"developed"),
+                ("nosort/bordered/bordered_d.jpg", b"ig"),
+                ("shoot/.hidden/bordered/bordered_e.jpg", b"ig"),
+            ],
+            dir: "",
+            opts: Options {
+                recursive: true,
+                bordered: true,
+                ..options()
+            },
+            want: vec![
+                "nosort/bordered/bordered_d.jpg",
+                "shoot/bordered/bordered_b.png",
+                "shoot/bordered_images/c.JPG",
+                "shoot/converted/bordered/bordered_a.jpg",
+            ],
+            files: vec![
+                "nosort/bordered/bordered_d.jpg",
+                "shoot/bordered/bordered_b.png",
+                "shoot/bordered_images/c.JPG",
+                "shoot/converted/bordered/bordered_a.jpg",
+            ],
+        },
+        Case {
+            name: "--bordered follows --exclude",
+            tree: vec![
+                ("20260620_marie/converted/x.jpg", b"x"),
+                ("20260620_marie/converted/bordered/bordered_x.jpg", b"ig"),
+                ("20260701_lyon/converted/y.jpg", b"y"),
+                ("20260701_lyon/converted/bordered/bordered_y.jpg", b"ig"),
+            ],
+            dir: "",
+            opts: Options {
+                recursive: true,
+                bordered: true,
+                exclude: globs(&["*marie*"]),
+                ..options()
+            },
+            want: vec!["20260701_lyon/converted/bordered/bordered_y.jpg"],
+            files: vec!["20260701_lyon/converted/bordered/bordered_y.jpg"],
+        },
+        Case {
             name: "non-recursive stops at the argument",
             tree: vec![
                 ("paris/IMG_1264.RW2", b"raw"),
@@ -237,9 +302,44 @@ fn sizes() {
             size: 3,
         }),
         kept: None,
+        bordered: false,
     }];
     assert_eq!(plan.candidates, want);
     assert_eq!(plan.candidates[0].size(), 8);
+}
+
+#[test]
+fn deleting_bordered_copies_removes_the_empty_folder_only() {
+    let root = new_tree(&[
+        ("a/converted/bordered/bordered_1.jpg", b"ig"),
+        ("b/bordered/bordered_2.jpg", b"ig"),
+        ("b/bordered/notes.txt", b"mine"),
+        ("a/converted/1.jpg", b"original"),
+    ]);
+    let plan = plan(
+        &Silent,
+        &root,
+        &Options {
+            recursive: true,
+            bordered: true,
+            ..options()
+        },
+    )
+    .unwrap();
+
+    for c in to_delete(plan) {
+        c.delete().unwrap();
+    }
+
+    assert!(
+        !at(&root, "a/converted/bordered").exists().unwrap(),
+        "the emptied bordered folder stayed"
+    );
+    assert_eq!(
+        files(&root),
+        ["a/converted/1.jpg", "b/bordered/notes.txt"],
+        "only the copies went"
+    );
 }
 
 #[test]
@@ -336,6 +436,31 @@ fn raw_therapee_layout_is_cleaned_shoot_by_shoot() {
         [
             "2025/20250804_luchon/_1310726.RW2",
             "2025/20250804_luchon/_1310752.RW2"
+        ]
+    );
+}
+
+#[test]
+fn raw_therapee_layout_bordered_adds_the_copies_of_both_scripts() {
+    let root = raw_therapee_layout();
+    let plan = plan(
+        &Silent,
+        &at(&root, "2025"),
+        &Options {
+            recursive: true,
+            bordered: true,
+            ..options()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        raw_paths(&to_delete(plan)),
+        [
+            "2025/20250804_luchon/_1310726.RW2",
+            "2025/20250804_luchon/_1310752.RW2",
+            "2025/20250804_luchon/converted/bordered/bordered__1310721.jpg",
+            "2025/20250804_luchon/converted/bordered_images/bordered__1310721.jpg",
         ]
     );
 }

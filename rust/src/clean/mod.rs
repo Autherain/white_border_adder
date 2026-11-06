@@ -21,6 +21,8 @@ pub struct Options {
     pub exclude: Vec<Glob>,
     pub only: Vec<Glob>,
     pub recursive: bool,
+    /// Adds the white-bordered Instagram copies to the plan.
+    pub bordered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +38,8 @@ pub struct Candidate {
     /// Why this candidate stays. Kept candidates stay in the plan so the
     /// caller can say what was spared.
     pub kept: Option<Kept>,
+    /// An Instagram copy rather than a raw; it has no sidecar.
+    pub bordered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +105,20 @@ impl Candidate {
                 source,
             })?;
         }
+        if self.bordered {
+            remove_if_empty(&self.raw.path.parent());
+        }
         Ok(files)
+    }
+}
+
+/// Tidies the bordered/ folder once its last copy is gone; what is left in
+/// it (a file kept by --exclude, a note of yours) keeps it alive.
+fn remove_if_empty(dir: &VfsPath) {
+    let Ok(mut entries) = dir.read_dir() else {
+        return;
+    };
+    if entries.next().is_none() {
+        let _ = dir.remove_dir();
     }
 }

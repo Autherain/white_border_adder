@@ -27,6 +27,13 @@ What gets deleted, step by step:
      sidecar (IMG_1264.RW2.pp3) when there is one. The sidecar of a raw
      that stays, stays.
 
+--bordered adds the Instagram copies written by \"wba border\" to the list: the
+images in bordered/ and converted/bordered/ of every directory (and in the
+old bordered_images/), which are only there to be posted. They go whether or
+not the photo they were made from is still around, and the folder goes once
+empty. --exclude and --only apply to them like to raws, so --only '*suisse*'
+cleans the copies of one shoot. converted/ itself is never touched.
+
 Nothing is deleted without --apply: the default run prints one line per
 file, a banner per directory with its total, and the grand total.
 
@@ -54,6 +61,9 @@ pub(crate) struct CleanArgs {
     /// Same kind of glob; when given, only the raws it matches go, the rest is kept; repeatable
     #[arg(long)]
     only: Vec<Glob>,
+    /// Also delete the white-bordered Instagram copies (bordered/, converted/bordered/, bordered_images/)
+    #[arg(long)]
+    bordered: bool,
 }
 
 impl<L: Log> App<L> {
@@ -64,6 +74,7 @@ impl<L: Log> App<L> {
             exclude: args.exclude,
             only: args.only,
             recursive: self.recursive,
+            bordered: args.bordered,
         };
 
         let plan = crate::clean::plan(&self.log, &dir, &o)?;
