@@ -35,10 +35,10 @@ fn border_dry_run_then_apply() {
     for apply in [false, true] {
         let root = new_tree(&[("photos/a.png", &png()), ("photos/b.jpg", b"not a jpeg")]);
         let at = root.clone();
-        let app = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
+        let (app, out) = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
 
         let result = app.border(args("photos"));
-        let got = output(app);
+        let got = output(&out);
 
         if apply {
             assert_eq!(

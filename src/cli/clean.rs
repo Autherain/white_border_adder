@@ -1,6 +1,5 @@
 use crate::clean::{Candidate, Options, Skipped};
 use crate::glob::Glob;
-use crate::log::Log;
 use clap::Args;
 
 use super::show::{Item, Stage, Verb, Warn};
@@ -66,7 +65,7 @@ pub(crate) struct CleanArgs {
     bordered: bool,
 }
 
-impl<L: Log> App<L> {
+impl App {
     pub(crate) fn clean(&self, args: CleanArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
         let o = Options {
@@ -77,7 +76,7 @@ impl<L: Log> App<L> {
             bordered: args.bordered,
         };
 
-        let plan = crate::clean::plan(&self.log, &dir, &o)?;
+        let plan = crate::clean::plan(&*self.log, &dir, &o)?;
         let skips: Vec<show::Skipped> = plan
             .skipped
             .iter()

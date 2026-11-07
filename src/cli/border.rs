@@ -1,5 +1,4 @@
 use crate::border::{Job, Options, Out, Ratios};
-use crate::log::Log;
 use crate::runeach::run_each;
 use clap::Args;
 
@@ -66,7 +65,7 @@ pub(crate) struct BorderArgs {
     workers: usize,
 }
 
-impl<L: Log> App<L> {
+impl App {
     pub(crate) fn border(&self, args: BorderArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
         let out = match args.out {
@@ -92,7 +91,7 @@ impl<L: Log> App<L> {
             force: args.force,
         };
 
-        let jobs = crate::border::plan(&self.log, &dir, &o)?;
+        let jobs = crate::border::plan(&*self.log, &dir, &o)?;
         if jobs.is_empty() {
             self.log.info(&self.palette.faint("nothing to do"));
             return Ok(());

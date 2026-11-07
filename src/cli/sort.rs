@@ -1,5 +1,4 @@
 use crate::glob::Glob;
-use crate::log::Log;
 use crate::sorter::{ExifOrMtime, Move, Options};
 use clap::Args;
 use vfs::VfsPath;
@@ -56,7 +55,7 @@ pub(crate) struct SortArgs {
     exclude: Vec<Glob>,
 }
 
-impl<L: Log> App<L> {
+impl App {
     pub(crate) fn sort(&self, args: SortArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
         let mut sources = Vec::new();
@@ -68,7 +67,7 @@ impl<L: Log> App<L> {
             exclude: args.exclude,
         };
 
-        let moves = crate::sorter::plan(&self.log, &ExifOrMtime, &dir, &sources, &o)?;
+        let moves = crate::sorter::plan(&*self.log, &ExifOrMtime, &dir, &sources, &o)?;
         if moves.is_empty() {
             self.log.info(&self.palette.faint("nothing to do"));
             return Ok(());

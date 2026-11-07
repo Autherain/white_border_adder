@@ -27,7 +27,7 @@ fn clean_dry_run_then_apply() {
             ("paris/converted/IMG_1264.jpg", b"jpeg"),
         ]);
         let at = root.clone();
-        let app = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
+        let (app, out) = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
 
         app.clean(args("paris", &["IMG_13*"])).unwrap();
 
@@ -48,7 +48,7 @@ fn clean_dry_run_then_apply() {
              ####### 1 file flagged: has a .pp3 but nothing in converted/\n\
              2 files, 6 B, 1 file, 3 B kept. Re-run with --apply to delete them.\n"
         };
-        assert_eq!(output(app), want, "apply={apply}");
+        assert_eq!(output(&out), want, "apply={apply}");
         assert_eq!(
             files(&root).contains(&"paris/IMG_1271.RW2".to_owned()),
             !apply,
@@ -64,7 +64,7 @@ fn bordered_copies_are_listed_under_their_folder() {
         ("paris/converted/bordered/bordered_IMG_1264.jpg", b"ig"),
         ("paris/bordered/bordered_IMG_1265.jpg", b"ig"),
     ]);
-    let app = test_app(false, Box::new(move |p| Ok(root.join(p)?)));
+    let (app, out) = test_app(false, Box::new(move |p| Ok(root.join(p)?)));
 
     app.clean(CleanArgs {
         bordered: true,
@@ -73,7 +73,7 @@ fn bordered_copies_are_listed_under_their_folder() {
     .unwrap();
 
     assert_eq!(
-        output(app),
+        output(&out),
         "####### bordered: 1 file, 2 B\n\
          would delete bordered/bordered_IMG_1265.jpg\n\
          ####### converted/bordered: 1 file, 2 B\n\
@@ -88,7 +88,7 @@ fn bordered_copies_are_listed_under_their_folder() {
 #[test]
 fn nothing_to_do() {
     let root = new_tree(&[("paris/converted/x.jpg", b"jpeg")]);
-    let app = test_app(false, Box::new(move |p| Ok(root.join(p)?)));
+    let (app, out) = test_app(false, Box::new(move |p| Ok(root.join(p)?)));
     app.clean(args("paris", &[])).unwrap();
-    assert_eq!(output(app), "nothing to do\n");
+    assert_eq!(output(&out), "nothing to do\n");
 }

@@ -1,25 +1,28 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::log::Lines;
+use crate::testfs::Buffer;
 
 use crate::cli::Locate;
 use crate::cli::style::Palette;
 
 use super::*;
 
-pub(crate) fn test_app(apply: bool, locate: Locate) -> App<Lines<Vec<u8>, Vec<u8>>> {
-    App {
-        log: Lines::new(Vec::new(), Vec::new(), false),
+/// The app and the buffer its stdout lands in.
+pub(crate) fn test_app(apply: bool, locate: Locate) -> (App, Buffer) {
+    let out = Buffer::default();
+    let app = App {
+        log: Box::new(Lines::new(out.clone(), Buffer::default(), false)),
         locate,
         palette: Palette::new(false),
         apply,
         recursive: false,
-    }
+    };
+    (app, out)
 }
 
-pub(crate) fn output(app: App<Lines<Vec<u8>, Vec<u8>>>) -> String {
-    let (out, _) = app.log.into_parts();
-    String::from_utf8_lossy(&out).into_owned()
+pub(crate) fn output(out: &Buffer) -> String {
+    out.text()
 }
 
 fn unused() -> Locate {
@@ -156,30 +159,30 @@ fn show_prints_the_plan() {
     ];
 
     for (name, verb, items, want) in cases {
-        let app = test_app(false, unused());
+        let (app, out) = test_app(false, unused());
         assert!(
             !app.show(verb, &items, &[]),
             "{name}: dry run asked to apply"
         );
-        assert_eq!(output(app), want, "{name}");
+        assert_eq!(output(&out), want, "{name}");
     }
 }
 
 #[test]
 fn show_with_apply_prints_nothing_and_says_go() {
-    let app = test_app(true, unused());
+    let (app, out) = test_app(true, unused());
     let items = vec![
         item("", &["a"], 0),
         kept("", &["b"], 0, "b"),
         item("", &["c"], 0),
     ];
     assert!(app.show(Verb::Delete, &items, &[]));
-    assert_eq!(output(app), "");
+    assert_eq!(output(&out), "");
 }
 
 #[test]
 fn show_skipped_and_nothing_to_run() {
-    let app = test_app(false, unused());
+    let (app, out) = test_app(false, unused());
     let items = vec![kept(
         "paris",
         &["paris/IMG_1264.RW2"],
@@ -192,7 +195,7 @@ fn show_skipped_and_nothing_to_run() {
     }];
     app.show(Verb::Delete, &items, &skips);
     assert_eq!(
-        output(app),
+        output(&out),
         "####### recap\n\
          keep    paris          1 file, 24 MB  not in --only *lyon*\n\
          skip    liechtenstein  124 raws, 2.4 GB, no converted/: not sorted yet\n\
@@ -202,7 +205,7 @@ fn show_skipped_and_nothing_to_run() {
 
 #[test]
 fn recap_once_done() {
-    let app = test_app(true, unused());
+    let (app, _) = test_app(true, unused());
     let items = vec![
         item(".", &["IMG_1264.RW2", "IMG_1264.RW2.pp3"], 24_012_000),
         kept(".", &["IMG_1300.RW2"], 2_000_000, "--exclude IMG_13*"),

@@ -4,6 +4,7 @@
 //! holds. Nothing touches the disk.
 
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 
 use vfs::{MemoryFS, VfsPath};
 
@@ -45,3 +46,26 @@ pub fn read(root: &VfsPath, path: &str) -> Vec<u8> {
 #[cfg(test)]
 #[path = "mod_test.rs"]
 mod tests;
+
+/// A writer the test keeps a handle on after handing a clone to the log,
+/// so what was printed can be read back.
+#[derive(Clone, Default)]
+pub struct Buffer(Arc<Mutex<Vec<u8>>>);
+
+impl Buffer {
+    pub fn text(&self) -> String {
+        let bytes = self.0.lock().unwrap();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}
+
+impl Write for Buffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}

@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use super::*;
+use crate::testfs::Buffer;
 
 #[test]
 fn human_rounds_like_a_photographer() {
@@ -24,26 +25,26 @@ fn cli_parses_every_verb() {
 #[test]
 fn version_and_bad_flag() {
     let locate: Locate = Box::new(|_| anyhow::bail!("unused"));
-    let mut out = Vec::new();
+    let out = Buffer::default();
     let code = run(
         locate,
         ["wba", "version"].map(OsString::from),
-        &mut out,
-        Vec::new(),
+        out.clone(),
+        Buffer::default(),
         false,
     );
     assert_eq!(code, ExitCode::SUCCESS);
-    assert_eq!(String::from_utf8_lossy(&out), format!("{VERSION}\n"));
+    assert_eq!(out.text(), format!("{VERSION}\n"));
 
     let locate: Locate = Box::new(|_| anyhow::bail!("unused"));
-    let mut err = Vec::new();
+    let err = Buffer::default();
     let code = run(
         locate,
         ["wba", "clean", "--nope", "d"].map(OsString::from),
-        Vec::new(),
-        &mut err,
+        Buffer::default(),
+        err.clone(),
         false,
     );
     assert_ne!(code, ExitCode::SUCCESS);
-    assert!(String::from_utf8_lossy(&err).contains("--nope"));
+    assert!(err.text().contains("--nope"));
 }

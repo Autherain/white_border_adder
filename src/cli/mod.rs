@@ -73,8 +73,11 @@ enum Verb {
 /// works on: the OS one in `main`, a tree in memory in the tests.
 pub type Locate = Box<dyn Fn(&str) -> anyhow::Result<VfsPath>>;
 
-struct App<L> {
-    log: L,
+struct App {
+    // A trait object rather than a type parameter: the logger is a behaviour,
+    // not a data type, and a generic `App<L>` would spread `<L>` over every
+    // impl and test signature. `&*self.log` hands the `&dyn Log` out of the box.
+    log: Box<dyn Log>,
     locate: Locate,
     palette: Palette,
     apply: bool,
@@ -86,8 +89,8 @@ struct App<L> {
 pub fn run(
     locate: Locate,
     args: impl IntoIterator<Item = OsString>,
-    mut out: impl Write + Send,
-    mut err: impl Write + Send,
+    mut out: impl Write + Send + 'static,
+    mut err: impl Write + Send + 'static,
     colour: bool,
 ) -> ExitCode {
     let cli = match Cli::try_parse_from(args) {
@@ -120,7 +123,7 @@ pub fn run(
     }
 
     let app = App {
-        log: Lines::new(out, err, cli.shared.verbose),
+        log: Box::new(Lines::new(out, err, cli.shared.verbose)),
         locate,
         palette: Palette::new(colour),
         apply: cli.shared.apply,
@@ -143,7 +146,7 @@ pub fn run(
     }
 }
 
-impl<L: Log> App<L> {
+impl App {
     fn locate(&self, arg: &str) -> anyhow::Result<VfsPath> {
         (self.locate)(arg)
     }

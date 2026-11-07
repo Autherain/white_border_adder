@@ -31,7 +31,7 @@ fn sort_dry_run_then_apply() {
         }
 
         let at = root.clone();
-        let app = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
+        let (app, out) = test_app(apply, Box::new(move |p| Ok(at.join(p)?)));
         app.sort(SortArgs {
             dir: "r".to_owned(),
             sources: vec!["r/d".to_owned()],
@@ -48,7 +48,7 @@ fn sort_dry_run_then_apply() {
              would move d/a.png.pp3 -> 2026/20260620_toulouse/a.png.pp3\n\
              2 files. Re-run with --apply to move them.\n"
         };
-        assert_eq!(output(app), want, "apply={apply}");
+        assert_eq!(output(&out), want, "apply={apply}");
 
         let moved = root
             .join("r/2026/20260620_toulouse/a.png")

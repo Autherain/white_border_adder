@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::log::{BANNER, Log};
+use crate::log::BANNER;
 
 use super::{App, files, human};
 
@@ -80,7 +80,7 @@ pub(crate) enum Stage {
     Finished,
 }
 
-impl<L: Log> App<L> {
+impl App {
     /// Prints the plan and says whether to run it: with --apply nothing is
     /// shown and the items not kept run; without it, showing the plan is the job.
     pub(crate) fn show(&self, verb: Verb, items: &[Item], skips: &[Skipped]) -> bool {
