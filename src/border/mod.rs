@@ -113,7 +113,10 @@ fn write(input: &VfsPath, output: &VfsPath, o: &Options) -> Result<(), Error> {
     // The whole file in one read and one write: a network mount pays a
     // round trip per call, and the codecs work in small chunks.
     let mut data = Vec::new();
-    let mut file = input.open_file().map_err(Error::Read)?;
+    let mut file = match input.open_file() {
+        Ok(f) => f,
+        Err(e) => return Err(Error::Read(e)),
+    };
     if let Err(e) = file.read_to_end(&mut data) {
         return Err(Error::Read(e.into()));
     }
@@ -125,18 +128,25 @@ fn write(input: &VfsPath, output: &VfsPath, o: &Options) -> Result<(), Error> {
     let canvas = render::render(decoded, o)?;
 
     let mut buf = Cursor::new(Vec::new());
-    if format(output)? == ImageFormat::Png {
+    let encoded = if format(output)? == ImageFormat::Png {
         canvas.write_to(&mut buf, ImageFormat::Png)
     } else {
         let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, o.jpeg_quality);
         image::DynamicImage::ImageRgba8(canvas)
             .to_rgb8()
             .write_with_encoder(encoder)
+    };
+    if let Err(e) = encoded {
+        return Err(Error::Encode(e));
     }
-    .map_err(Error::Encode)?;
 
-    output.parent().create_dir_all().map_err(Error::Mkdir)?;
-    let mut file = output.create_file().map_err(Error::Write)?;
+    if let Err(e) = output.parent().create_dir_all() {
+        return Err(Error::Mkdir(e));
+    }
+    let mut file = match output.create_file() {
+        Ok(f) => f,
+        Err(e) => return Err(Error::Write(e)),
+    };
     if let Err(e) = file.write_all(buf.get_ref()) {
         return Err(Error::Write(e.into()));
     }
@@ -149,18 +159,32 @@ fn write(input: &VfsPath, output: &VfsPath, o: &Options) -> Result<(), Error> {
 /// then never exists in memory.
 fn decode_jpeg(data: &[u8], o: &Options) -> Result<Decoded, Error> {
     let mut decoder = jpeg_decoder::Decoder::new(data);
-    decoder.read_info().map_err(Error::DecodeJpeg)?;
-    let Some(info) = decoder.info() else {
-        return Err(Error::Format("JPEG without a header".to_owned()));
+    if let Err(e) = decoder.read_info() {
+        return Err(Error::DecodeJpeg(e));
+    }
+    let info = match decoder.info() {
+        Some(i) => i,
+        None => return Err(Error::Format("JPEG without a header".to_owned())),
     };
 
     let at = render::layout(u32::from(info.width), u32::from(info.height), o);
-    let wanted_w = u16::try_from(at.width).unwrap_or(u16::MAX);
-    let wanted_h = u16::try_from(at.height).unwrap_or(u16::MAX);
-    let (width, height) = decoder
-        .scale(wanted_w, wanted_h)
-        .map_err(Error::DecodeJpeg)?;
-    let pixels = decoder.decode().map_err(Error::DecodeJpeg)?;
+    // The decoder takes u16 sizes; a canvas past that asks for its largest.
+    let wanted_w = match u16::try_from(at.width) {
+        Ok(w) => w,
+        Err(_) => u16::MAX,
+    };
+    let wanted_h = match u16::try_from(at.height) {
+        Ok(h) => h,
+        Err(_) => u16::MAX,
+    };
+    let (width, height) = match decoder.scale(wanted_w, wanted_h) {
+        Ok(size) => size,
+        Err(e) => return Err(Error::DecodeJpeg(e)),
+    };
+    let pixels = match decoder.decode() {
+        Ok(p) => p,
+        Err(e) => return Err(Error::DecodeJpeg(e)),
+    };
 
     let rgb = match info.pixel_format {
         jpeg_decoder::PixelFormat::RGB24 => pixels,
@@ -184,7 +208,10 @@ fn grey_to_rgb(grey: &[u8]) -> Vec<u8> {
 }
 
 fn decode_png(data: &[u8]) -> Result<Decoded, Error> {
-    let img = image::load_from_memory_with_format(data, ImageFormat::Png).map_err(Error::Decode)?;
+    let img = match image::load_from_memory_with_format(data, ImageFormat::Png) {
+        Ok(i) => i,
+        Err(e) => return Err(Error::Decode(e)),
+    };
     let rgba = img.to_rgba8();
     Ok(Decoded {
         width: rgba.width(),

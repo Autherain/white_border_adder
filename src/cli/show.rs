@@ -169,16 +169,21 @@ impl<L: Log> App<L> {
 
         // Nothing to run means no hint either: --apply would do nothing.
         if run.is_empty() {
-            let rest = total.strip_prefix(&summary(&run)).unwrap_or(&total);
+            let rest = match total.strip_prefix(&summary(&run)) {
+                Some(r) => r,
+                None => &total,
+            };
             lines.push(self.palette.bold(&format!("nothing to do{rest}.")));
-        } else if at == Stage::Finished {
-            lines.push(self.palette.bold(&format!("{total}.")));
-        } else {
-            lines.push(format!(
-                "{} Re-run with --apply to {verb} them.",
-                self.palette.bold(&format!("{total}."))
-            ));
+            return lines;
         }
+        if at == Stage::Finished {
+            lines.push(self.palette.bold(&format!("{total}.")));
+            return lines;
+        }
+        lines.push(format!(
+            "{} Re-run with --apply to {verb} them.",
+            self.palette.bold(&format!("{total}."))
+        ));
         lines
     }
 
@@ -244,10 +249,9 @@ fn summary(items: &[&Item]) -> String {
     let n: usize = items.iter().map(|it| it.files.len()).sum();
     let total: u64 = items.iter().map(|it| it.size).sum();
     if total == 0 {
-        files(n)
-    } else {
-        format!("{}, {}", files(n), human(total))
+        return files(n);
     }
+    format!("{}, {}", files(n), human(total))
 }
 
 /// The distinct reasons that kept these items, in order of appearance.

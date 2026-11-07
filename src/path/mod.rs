@@ -11,7 +11,10 @@ pub fn below<'p>(base: &VfsPath, path: &'p VfsPath) -> Option<Vec<&'p str>> {
         .as_str()
         .strip_prefix(base.as_str())?
         .strip_prefix('/')?;
-    (!rest.is_empty()).then(|| rest.split('/').collect())
+    if rest.is_empty() {
+        return None;
+    }
+    Some(rest.split('/').collect())
 }
 
 /// `path` relative to `base`: "." for the base itself, "../x" for a sibling.
@@ -26,10 +29,9 @@ pub fn relative(base: &VfsPath, path: &VfsPath) -> String {
     let mut parts: Vec<&str> = vec![".."; from.len() - common];
     parts.extend_from_slice(&to[common..]);
     if parts.is_empty() {
-        ".".to_owned()
-    } else {
-        parts.join("/")
+        return ".".to_owned();
     }
+    parts.join("/")
 }
 
 fn segments(path: &str) -> Vec<&str> {

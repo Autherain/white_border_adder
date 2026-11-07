@@ -86,24 +86,37 @@ pub struct Failed {
 
 impl Candidate {
     /// The raw, then the sidecar when present: what `delete` removes.
-    pub fn files(&self) -> impl Iterator<Item = &File> {
-        std::iter::once(&self.raw).chain(self.sidecar.as_ref())
+    pub fn files(&self) -> Vec<&File> {
+        let mut files = vec![&self.raw];
+        if let Some(sidecar) = &self.sidecar {
+            files.push(sidecar);
+        }
+        files
     }
 
     pub fn size(&self) -> u64 {
-        self.files().map(|f| f.size).sum()
+        let mut total = 0;
+        for f in self.files() {
+            total += f.size;
+        }
+        total
     }
 
     /// Removes the raw and its sidecar. The candidate is consumed: a deleted
     /// file cannot be deleted twice. The paths removed come back for the
     /// caller to print; the first failure stops the rest.
     pub fn delete(self) -> Result<Vec<VfsPath>, Failed> {
-        let files: Vec<VfsPath> = self.files().map(|f| f.path.clone()).collect();
+        let mut files = Vec::new();
+        for f in self.files() {
+            files.push(f.path.clone());
+        }
         for path in &files {
-            path.remove_file().map_err(|source| Failed {
-                path: path.clone(),
-                source,
-            })?;
+            if let Err(source) = path.remove_file() {
+                return Err(Failed {
+                    path: path.clone(),
+                    source,
+                });
+            }
         }
         if self.bordered {
             remove_if_empty(&self.raw.path.parent());
@@ -115,8 +128,9 @@ impl Candidate {
 /// Tidies the bordered/ folder once its last copy is gone; what is left in
 /// it (a file kept by --exclude, a note of yours) keeps it alive.
 fn remove_if_empty(dir: &VfsPath) {
-    let Ok(mut entries) = dir.read_dir() else {
-        return;
+    let mut entries = match dir.read_dir() {
+        Ok(e) => e,
+        Err(_) => return,
     };
     if entries.next().is_none() {
         let _ = dir.remove_dir();

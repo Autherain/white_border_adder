@@ -42,7 +42,10 @@ pub fn plan(log: &dyn Log, dir: &VfsPath, o: &Options) -> Result<Plan, Error> {
             level.extend(l.subdirs);
             plan.candidates.extend(l.candidates);
 
-            let Some(sk) = l.skipped else { continue };
+            let sk = match l.skipped {
+                Some(s) => s,
+                None => continue,
+            };
             log.debug(&format!(
                 "skip {}: no {CONVERTED_DIR}/",
                 relative(dir, &sk.dir)
@@ -263,8 +266,9 @@ fn converted_names(converted: Option<&Entry>) -> Option<Converted> {
     if !converted.is_dir() {
         return None;
     }
-    let Ok(entries) = entries(&converted.path) else {
-        return None;
+    let entries = match entries(&converted.path) {
+        Ok(e) => e,
+        Err(_) => return None,
     };
 
     let mut got = Converted {

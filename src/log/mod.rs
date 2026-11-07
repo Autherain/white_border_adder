@@ -1,7 +1,7 @@
 //! Bare lines: info on stdout, errors on stderr, debug only when verbose.
 
 use std::io::Write;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 /// Opens every line that needs a second look, so it stands out in a long
 /// list and can be grepped.
@@ -32,20 +32,26 @@ impl<O: Write + Send, E: Write + Send> Lines<O, E> {
     /// Hands the writers back, which is how a test reads what was printed.
     #[cfg(test)]
     pub fn into_parts(self) -> (O, E) {
-        (
-            self.out
-                .into_inner()
-                .unwrap_or_else(PoisonError::into_inner),
-            self.err
-                .into_inner()
-                .unwrap_or_else(PoisonError::into_inner),
-        )
+        let out = match self.out.into_inner() {
+            Ok(w) => w,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let err = match self.err.into_inner() {
+            Ok(w) => w,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        (out, err)
     }
 }
 
 // A write that fails has nowhere to be reported, so it is dropped.
 fn put(w: &Mutex<impl Write>, line: &str) {
-    let mut w = w.lock().unwrap_or_else(PoisonError::into_inner);
+    // A thread that panicked mid-write poisons the lock; the writer is
+    // still usable, so the next line goes out anyway.
+    let mut w = match w.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     let _ = writeln!(w, "{line}");
 }
 

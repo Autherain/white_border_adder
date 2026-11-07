@@ -191,14 +191,20 @@ fn scan(dir: &VfsPath, recursive: bool, exclude: &[Glob]) -> Result<Scanned, Vfs
 
 fn developed_names(dir: &VfsPath) -> Vec<String> {
     let mut names = Vec::new();
-    let Ok(converted) = dir.join(CONVERTED_DIR) else {
-        return names;
+    let converted = match dir.join(CONVERTED_DIR) {
+        Ok(p) => p,
+        Err(_) => return names,
     };
-    let Ok(entries) = converted.read_dir() else {
-        return names;
+    let entries = match converted.read_dir() {
+        Ok(e) => e,
+        Err(_) => return names,
     };
     for e in entries {
-        if e.is_file().unwrap_or(false) {
+        let is_file = match e.is_file() {
+            Ok(b) => b,
+            Err(_) => false,
+        };
+        if is_file {
             names.push(e.filename());
         }
     }
@@ -214,10 +220,11 @@ fn developed_from(name: &str, converted: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     for c in converted {
         let low = c.to_ascii_lowercase();
-        let Some(rest) = low.strip_prefix(&stem) else {
-            continue;
+        let rest = match low.strip_prefix(&stem) {
+            Some(r) => r,
+            None => continue,
         };
-        if rest.starts_with(|ch: char| ch.is_ascii_digit()) {
+        if !rest.is_empty() && rest.as_bytes()[0].is_ascii_digit() {
             continue;
         }
         out.push(c.clone());
@@ -268,8 +275,9 @@ impl Planner<'_> {
     /// `None` when the photo stays where it is and nothing is listed.
     fn decide(&mut self, d: Dated) -> Option<Move> {
         let from = d.photo.path.clone();
-        let Some(when) = d.when else {
-            return Some(kept(from, Kept::NoDate));
+        let when = match d.when {
+            Some(w) => w,
+            None => return Some(kept(from, Kept::NoDate)),
         };
 
         let day = when.strftime("%Y%m%d").to_string();
@@ -278,7 +286,10 @@ impl Planner<'_> {
         let dated = |name: &str| name.starts_with(&day) || name.starts_with(&iso);
 
         let parent = from.parent();
-        let parts = below(self.root, &parent).unwrap_or_default();
+        let parts = match below(self.root, &parent) {
+            Some(p) => p,
+            None => Vec::new(),
+        };
 
         if parts.len() >= 2 && parts[0] == year && dated(parts[1]) {
             return None;
@@ -303,9 +314,19 @@ impl Planner<'_> {
             }
         }
 
-        let mut dir = self.root.join(&year).ok()?.join(&name).ok()?;
+        let mut dir = match self.root.join(&year) {
+            Ok(d) => d,
+            Err(_) => return None,
+        };
+        dir = match dir.join(&name) {
+            Ok(d) => d,
+            Err(_) => return None,
+        };
         for s in sub {
-            dir = dir.join(s).ok()?;
+            dir = match dir.join(s) {
+                Ok(d) => d,
+                Err(_) => return None,
+            };
         }
         if dir == parent {
             return None;
@@ -320,15 +341,20 @@ impl Planner<'_> {
         day: &str,
         dated: &dyn Fn(&str) -> bool,
     ) -> Result<String, Kept> {
-        let Ok(dir) = self.root.join(year) else {
-            return Err(Kept::NoDate);
+        let dir = match self.root.join(year) {
+            Ok(d) => d,
+            Err(_) => return Err(Kept::NoDate),
         };
 
         if !self.listed.contains_key(dir.as_str()) {
             let mut names = Vec::new();
             if let Ok(entries) = dir.read_dir() {
                 for e in entries {
-                    if e.is_dir().unwrap_or(false) {
+                    let is_dir = match e.is_dir() {
+                        Ok(b) => b,
+                        Err(_) => false,
+                    };
+                    if is_dir {
                         names.push(e.filename());
                     }
                 }
@@ -358,8 +384,9 @@ impl Planner<'_> {
 
     fn target(&mut self, photo: Photo, dir: &VfsPath) -> Move {
         let from = photo.path;
-        let Ok(to) = dir.join(from.filename()) else {
-            return kept(from, Kept::NoDate);
+        let to = match dir.join(from.filename()) {
+            Ok(t) => t,
+            Err(_) => return kept(from, Kept::NoDate),
         };
 
         let mut with = Vec::new();
@@ -391,7 +418,12 @@ impl Planner<'_> {
                 m.kept = Some(Kept::SameNameAs(other.clone()));
                 return m;
             }
-            if pair.to.exists().unwrap_or(true) {
+            // A target that cannot be checked counts as taken.
+            let exists = match pair.to.exists() {
+                Ok(b) => b,
+                Err(_) => true,
+            };
+            if exists {
                 m.kept = Some(Kept::AlreadyIn(dir.filename()));
                 return m;
             }

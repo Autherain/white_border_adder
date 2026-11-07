@@ -12,43 +12,38 @@ impl Palette {
     }
 
     pub(crate) fn would(&self, s: &str) -> String {
-        if self.colour {
-            s.yellow().to_string()
-        } else {
-            s.to_owned()
+        if !self.colour {
+            return s.to_owned();
         }
+        s.yellow().to_string()
     }
 
     pub(crate) fn done(&self, s: &str) -> String {
-        if self.colour {
-            s.green().to_string()
-        } else {
-            s.to_owned()
+        if !self.colour {
+            return s.to_owned();
         }
+        s.green().to_string()
     }
 
     pub(crate) fn gone(&self, s: &str) -> String {
-        if self.colour {
-            s.red().to_string()
-        } else {
-            s.to_owned()
+        if !self.colour {
+            return s.to_owned();
         }
+        s.red().to_string()
     }
 
     pub(crate) fn faint(&self, s: &str) -> String {
-        if self.colour {
-            s.dimmed().to_string()
-        } else {
-            s.to_owned()
+        if !self.colour {
+            return s.to_owned();
         }
+        s.dimmed().to_string()
     }
 
     pub(crate) fn bold(&self, s: &str) -> String {
-        if self.colour {
-            s.bold().to_string()
-        } else {
-            s.to_owned()
+        if !self.colour {
+            return s.to_owned();
         }
+        s.bold().to_string()
     }
 }
 

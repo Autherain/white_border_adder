@@ -1,7 +1,7 @@
 //! A bounded pool with results handed back as they complete.
 
 use std::sync::mpsc;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 use std::thread;
 
 /// Calls `f` on every item from `workers` threads and hands each result to
@@ -28,8 +28,11 @@ pub fn run_each<T: Send, R: Send>(
                     // Taken on its own line: a guard born inside a `while let`
                     // condition lives for the whole body, and the pool would
                     // run one item at a time with the lock held during `f`.
-                    let next = queue.lock().unwrap_or_else(PoisonError::into_inner).next();
-                    let Some(item) = next else { break };
+                    let next = locked(queue).next();
+                    let item = match next {
+                        Some(i) => i,
+                        None => break,
+                    };
                     if tx.send(f(item)).is_err() {
                         return;
                     }
@@ -47,3 +50,12 @@ pub fn run_each<T: Send, R: Send>(
 #[cfg(test)]
 #[path = "mod_test.rs"]
 mod tests;
+
+/// A worker that panicked while holding the lock poisons it; the queue it
+/// guards is still sound, so the pool goes on.
+fn locked<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    match m.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}

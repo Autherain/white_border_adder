@@ -59,11 +59,10 @@ pub(crate) struct SortArgs {
 impl<L: Log> App<L> {
     pub(crate) fn sort(&self, args: SortArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
-        let sources = args
-            .sources
-            .iter()
-            .map(|s| self.locate(s))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let mut sources = Vec::new();
+        for s in &args.sources {
+            sources.push(self.locate(s)?);
+        }
         let o = Options {
             recursive: self.recursive,
             exclude: args.exclude,
@@ -139,7 +138,10 @@ fn sort_item(dir: &VfsPath, m: &Move) -> Item {
         files,
         size: 0,
         warn: None,
-        kept: m.kept.as_ref().map(ToString::to_string),
+        kept: match &m.kept {
+            Some(why) => Some(why.to_string()),
+            None => None,
+        },
     }
 }
 

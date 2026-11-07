@@ -24,10 +24,15 @@ impl FromStr for Glob {
     type Err = Error;
 
     fn from_str(text: &str) -> Result<Self, Error> {
-        let pattern = Pattern::new(text).map_err(|source| Error {
-            text: text.to_owned(),
-            source,
-        })?;
+        let pattern = match Pattern::new(text) {
+            Ok(p) => p,
+            Err(source) => {
+                return Err(Error {
+                    text: text.to_owned(),
+                    source,
+                });
+            }
+        };
         Ok(Self {
             text: text.to_owned(),
             pattern,

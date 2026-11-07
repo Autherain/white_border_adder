@@ -501,8 +501,9 @@ fn exclude_keeps_by_directory_stem_or_path() {
         // Kept candidates stay in the plan, marked with the glob that kept them.
         for c in &plan.candidates {
             if let Some(kept) = &c.kept {
-                let Kept::Excluded(g) = kept else {
-                    panic!("{name}: kept by {kept}")
+                let g = match kept {
+                    Kept::Excluded(g) => g,
+                    Kept::NotInOnly(_) => panic!("{name}: kept by {kept}"),
                 };
                 assert!(exclude.contains(&g.as_str()), "{name}: kept by {g}");
             }

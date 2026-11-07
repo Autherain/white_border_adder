@@ -40,6 +40,12 @@ doc_markdown = "allow"
 too_many_lines = "allow"
 # `name = x.to_owned()` reads better than `x.clone_into(&mut name)`.
 assigning_clones = "allow"
+# A two-arm match shows both branches; see docs/decisions/plain-over-clever.md.
+manual_let_else = "allow"
+manual_unwrap_or = "allow"
+manual_unwrap_or_default = "allow"
+manual_ok_err = "allow"
+manual_map = "allow"
 
 [profile.release]
 strip = true

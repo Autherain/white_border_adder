@@ -44,12 +44,14 @@ impl Dates for ExifOrMtime {
         if let Some(shot) = exif::shot_date(path) {
             return Some(shot);
         }
-        let Ok(meta) = path.metadata() else {
-            return None;
+        let meta = match path.metadata() {
+            Ok(m) => m,
+            Err(_) => return None,
         };
         let modified = meta.modified?;
-        let Ok(stamp) = jiff::Timestamp::try_from(modified) else {
-            return None;
+        let stamp = match jiff::Timestamp::try_from(modified) {
+            Ok(s) => s,
+            Err(_) => return None,
         };
         Some(stamp.to_zoned(jiff::tz::TimeZone::system()).datetime())
     }
@@ -108,8 +110,16 @@ impl fmt::Display for Kept {
 pub enum Error {
     #[error("{0}: already exists")]
     Exists(String),
-    #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
+    #[error("{}", joined(.0))]
     Fs(Vec<VfsError>),
+}
+
+fn joined(errs: &[VfsError]) -> String {
+    let mut texts = Vec::new();
+    for e in errs {
+        texts.push(e.to_string());
+    }
+    texts.join("; ")
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -123,16 +133,17 @@ pub struct Failed {
 impl Move {
     /// Every file that moves, the photo first; nothing for a move without a target.
     pub fn pairs(&self) -> Vec<Pair> {
-        let Some(to) = &self.to else {
-            return Vec::new();
+        let to = match &self.to {
+            Some(t) => t,
+            None => return Vec::new(),
         };
         let photo = Pair {
             from: self.from.clone(),
             to: to.clone(),
         };
-        std::iter::once(photo)
-            .chain(self.with.iter().cloned())
-            .collect()
+        let mut pairs = vec![photo];
+        pairs.extend_from_slice(&self.with);
+        pairs
     }
 
     /// Checks every target again right before moving: a rename onto an
@@ -153,8 +164,15 @@ impl Move {
 }
 
 fn run(pairs: &[Pair]) -> Result<(), Error> {
-    if let Some(taken) = pairs.iter().find(|p| p.to.exists().unwrap_or(true)) {
-        return Err(Error::Exists(taken.to.as_str().to_owned()));
+    for pair in pairs {
+        // A target that cannot be checked counts as taken.
+        let exists = match pair.to.exists() {
+            Ok(b) => b,
+            Err(_) => true,
+        };
+        if exists {
+            return Err(Error::Exists(pair.to.as_str().to_owned()));
+        }
     }
 
     let mut errs = Vec::new();
@@ -172,8 +190,7 @@ fn run(pairs: &[Pair]) -> Result<(), Error> {
     }
 
     if errs.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::Fs(errs))
+        return Ok(());
     }
+    Err(Error::Fs(errs))
 }

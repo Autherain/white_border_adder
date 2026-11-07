@@ -99,7 +99,11 @@ pub fn run(
             } else {
                 let _ = write!(out, "{text}");
             }
-            return ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(2));
+            let code = match u8::try_from(e.exit_code()) {
+                Ok(c) => c,
+                Err(_) => 2,
+            };
+            return ExitCode::from(code);
         }
     };
 
@@ -152,19 +156,17 @@ impl<L: Log> App<L> {
 
 fn files(n: usize) -> String {
     if n == 1 {
-        "1 file".to_owned()
-    } else {
-        format!("{n} files")
+        return "1 file".to_owned();
     }
+    format!("{n} files")
 }
 
 /// The verb's error once it ran: how many items failed, or nothing.
 fn failures(n: usize) -> anyhow::Result<()> {
     if n == 0 {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("{} failed", files(n)))
+        return Ok(());
     }
+    Err(anyhow::anyhow!("{} failed", files(n)))
 }
 
 /// Rounds to the unit a photographer thinks in: raws are tens of MB.

@@ -52,13 +52,22 @@ fn top() -> std::path::PathBuf {
 
 fn locate(root: &VfsPath, arg: &str) -> anyhow::Result<VfsPath> {
     let abs = std::path::absolute(arg)?;
-    let mut rel = Vec::new();
+
+    // Keep only the real names ("home", "photos"); drop "/", "." and "..",
+    // which `absolute` has already resolved.
+    let mut relation: Vec<&str> = Vec::new();
     for c in abs.components() {
-        let Component::Normal(name) = c else { continue };
-        let Some(name) = name.to_str() else {
-            anyhow::bail!("{arg}: not valid UTF-8");
+        if !matches!(c, Component::Normal(_)) {
+            continue;
+        }
+        let name = match c.as_os_str().to_str() {
+            Some(text) => text,
+            None => anyhow::bail!("{arg}: not valid UTF-8"),
         };
-        rel.push(name);
+        relation.push(name);
     }
-    Ok(root.join(rel.join("/"))?)
+
+    let joined = relation.join("/");
+    let path = root.join(joined)?;
+    Ok(path)
 }

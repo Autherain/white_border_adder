@@ -38,8 +38,9 @@ pub fn shot_date(path: &VfsPath) -> Option<DateTime> {
 }
 
 fn read_head(path: &VfsPath) -> Option<Vec<u8>> {
-    let Ok(file) = path.open_file() else {
-        return None;
+    let file = match path.open_file() {
+        Ok(f) => f,
+        Err(_) => return None,
     };
     let mut head = Vec::new();
     if file.take(HEAD_SIZE).read_to_end(&mut head).is_err() {
@@ -97,7 +98,10 @@ impl Order {
     /// A u32 used as a position in the file.
     fn offset(self, b: &[u8], at: usize) -> Option<usize> {
         let value = self.u32(b, at)?;
-        usize::try_from(value).ok()
+        match usize::try_from(value) {
+            Ok(off) => Some(off),
+            Err(_) => None,
+        }
     }
 }
 
@@ -122,11 +126,13 @@ fn tiff_date(b: &[u8]) -> Option<DateTime> {
 fn time_at(b: &[u8], order: Order, ifd: usize, tag: u16) -> Option<DateTime> {
     let off = find_tag(b, order, ifd, tag)?;
     let bytes = b.get(off..off + TIME_LEN)?;
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return None;
+    let text = match std::str::from_utf8(bytes) {
+        Ok(t) => t,
+        Err(_) => return None,
     };
-    let Ok(t) = DateTime::strptime("%Y:%m:%d %H:%M:%S", text) else {
-        return None;
+    let t = match DateTime::strptime("%Y:%m:%d %H:%M:%S", text) {
+        Ok(t) => t,
+        Err(_) => return None,
     };
     if t.year() <= 1970 {
         return None;

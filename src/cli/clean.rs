@@ -135,12 +135,13 @@ impl<L: Log> App<L> {
 }
 
 fn clean_item(dir: &vfs::VfsPath, c: &Candidate) -> Item {
+    let mut files = Vec::new();
+    for f in c.files() {
+        files.push(crate::path::relative(dir, &f.path));
+    }
     Item {
         dir: crate::path::relative(dir, &c.raw.path.parent()),
-        files: c
-            .files()
-            .map(|f| crate::path::relative(dir, &f.path))
-            .collect(),
+        files,
         size: c.size(),
         // A sidecar without an export means time was spent on this raw in
         // RawTherapee; worth a look before it goes.
@@ -149,7 +150,10 @@ fn clean_item(dir: &vfs::VfsPath, c: &Candidate) -> Item {
         } else {
             None
         },
-        kept: c.kept.as_ref().map(ToString::to_string),
+        kept: match &c.kept {
+            Some(why) => Some(why.to_string()),
+            None => None,
+        },
     }
 }
 

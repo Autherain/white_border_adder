@@ -65,32 +65,36 @@ pub fn render(img: Decoded, o: &Options) -> Result<RgbaImage, Error> {
 
 /// Bilinear on SIMD lanes: the photo only ever shrinks, so a wider filter
 /// buys nothing visible.
+const WRONG_SIZE: &str = "resized buffer has the wrong size";
+
 fn resize(img: Decoded, width: u32, height: u32) -> Result<RgbaImage, Error> {
     let kind = if img.alpha {
         PixelType::U8x4
     } else {
         PixelType::U8x3
     };
-    let src = Image::from_vec_u8(img.width, img.height, img.pixels, kind).map_err(Error::Pixels)?;
+    let src = match Image::from_vec_u8(img.width, img.height, img.pixels, kind) {
+        Ok(s) => s,
+        Err(e) => return Err(Error::Pixels(e)),
+    };
     let mut dst = Image::new(width, height, kind);
 
     let bilinear = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear));
-    Resizer::new()
-        .resize(&src, &mut dst, &bilinear)
-        .map_err(Error::Resize)?;
-
-    let out = if img.alpha {
-        RgbaImage::from_raw(width, height, dst.into_vec())
-    } else {
-        let rgb = RgbImage::from_raw(width, height, dst.into_vec());
-        rgb.map(|rgb| DynamicImage::ImageRgb8(rgb).to_rgba8())
-    };
-    match out {
-        Some(out) => Ok(out),
-        None => Err(Error::Format(
-            "resized buffer has the wrong size".to_owned(),
-        )),
+    if let Err(e) = Resizer::new().resize(&src, &mut dst, &bilinear) {
+        return Err(Error::Resize(e));
     }
+
+    if img.alpha {
+        return match RgbaImage::from_raw(width, height, dst.into_vec()) {
+            Some(out) => Ok(out),
+            None => Err(Error::Format(WRONG_SIZE.to_owned())),
+        };
+    }
+    let rgb = match RgbImage::from_raw(width, height, dst.into_vec()) {
+        Some(rgb) => rgb,
+        None => return Err(Error::Format(WRONG_SIZE.to_owned())),
+    };
+    Ok(DynamicImage::ImageRgb8(rgb).to_rgba8())
 }
 
 #[cfg(test)]

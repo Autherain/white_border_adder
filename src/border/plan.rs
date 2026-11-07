@@ -98,7 +98,10 @@ impl Planner<'_> {
 
     fn out_base(&self) -> String {
         match &self.o.out {
-            Out::Beside(rel) => rel.rsplit('/').next().unwrap_or(rel).to_owned(),
+            Out::Beside(rel) => match rel.rfind('/') {
+                Some(slash) => rel[slash + 1..].to_owned(),
+                None => rel.to_owned(),
+            },
             Out::At(path) => path.filename(),
         }
     }
@@ -125,11 +128,13 @@ impl Planner<'_> {
             return;
         }
 
-        let Ok(out_dir) = self.out_dir(dir) else {
-            return;
+        let out_dir = match self.out_dir(dir) {
+            Ok(d) => d,
+            Err(_) => return,
         };
-        let Ok(output) = out_dir.join(&out_name) else {
-            return;
+        let output = match out_dir.join(&out_name) {
+            Ok(p) => p,
+            Err(_) => return,
         };
         self.jobs.push(Job { input, output });
     }
