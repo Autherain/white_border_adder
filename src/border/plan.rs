@@ -76,8 +76,12 @@ impl Planner {
         let out = self.out_dir(photo_dir)?;
         let entries = match out.read_dir() {
             Ok(entries) => entries,
-            Err(e) if matches!(e.kind(), VfsErrorKind::FileNotFound) => return Ok(HashSet::new()),
-            Err(e) => return Err(Error::Read(out.as_str().to_owned(), e)),
+            Err(e) => {
+                if matches!(e.kind(), VfsErrorKind::FileNotFound) {
+                    return Ok(HashSet::new());
+                }
+                return Err(Error::Read(out.as_str().to_owned(), e));
+            }
         };
 
         let mut names = HashSet::new();

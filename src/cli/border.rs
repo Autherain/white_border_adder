@@ -1,4 +1,5 @@
 use crate::border::{Job, Options, Out, Ratios};
+use crate::path::relative;
 use crate::runeach::run_each;
 use clap::Args;
 
@@ -70,8 +71,13 @@ impl App {
         let dir = self.locate(&args.dir)?;
         let out = match args.out {
             None => Out::default(),
-            Some(p) if std::path::Path::new(&p).is_absolute() => Out::At(self.locate(&p)?),
-            Some(p) => Out::Beside(p),
+            Some(p) => {
+                if std::path::Path::new(&p).is_absolute() {
+                    Out::At(self.locate(&p)?)
+                } else {
+                    Out::Beside(p)
+                }
+            }
         };
         let o = Options {
             width: args.width,
@@ -97,14 +103,7 @@ impl App {
             return Ok(());
         }
 
-        let items: Vec<Item> = jobs
-            .iter()
-            .map(|j| Item {
-                dir: crate::path::relative(&dir, &j.input.parent()),
-                files: vec![crate::path::relative(&dir, &j.output)],
-                ..Item::default()
-            })
-            .collect();
+        let items: Vec<Item> = jobs.iter().map(|j| border_item(&dir, j)).collect();
         if !self.show(Verb::Write, &items, &[]) {
             return Ok(());
         }
@@ -136,6 +135,16 @@ impl App {
             },
         );
         failed
+    }
+}
+
+fn border_item(dir: &vfs::VfsPath, j: &Job) -> Item {
+    Item {
+        dir: relative(dir, &j.input.parent()),
+        files: vec![relative(dir, &j.output)],
+        size: 0,
+        warn: None,
+        kept: None,
     }
 }
 

@@ -271,6 +271,20 @@ fn kept(from: VfsPath, why: Kept) -> Move {
     }
 }
 
+/// The same name under two directories; `None` when it cannot be joined
+/// to one of them, and the file then stays behind.
+fn pair(from_dir: &VfsPath, to_dir: &VfsPath, name: &str) -> Option<Pair> {
+    let from = match from_dir.join(name) {
+        Ok(p) => p,
+        Err(_) => return None,
+    };
+    let to = match to_dir.join(name) {
+        Ok(p) => p,
+        Err(_) => return None,
+    };
+    Some(Pair { from, to })
+}
+
 impl Planner {
     /// `None` when the photo stays where it is and nothing is listed.
     fn decide(&mut self, d: Dated) -> Option<Move> {
@@ -389,21 +403,19 @@ impl Planner {
             Err(_) => return kept(from, Kept::NoDate),
         };
 
-        let mut with = Vec::new();
+        // What follows the photo keeps its name and its place beside it.
+        let mut names = Vec::new();
         if photo.sidecar {
-            let sidecar_from = from
-                .parent()
-                .join(format!("{}{SIDECAR_EXT}", from.filename()));
-            let sidecar_to = dir.join(format!("{}{SIDECAR_EXT}", to.filename()));
-            if let (Ok(from), Ok(to)) = (sidecar_from, sidecar_to) {
-                with.push(Pair { from, to });
-            }
+            names.push(format!("{}{SIDECAR_EXT}", from.filename()));
         }
         for name in &photo.developed {
-            let developed_from = from.parent().join(format!("{CONVERTED_DIR}/{name}"));
-            let developed_to = dir.join(format!("{CONVERTED_DIR}/{name}"));
-            if let (Ok(from), Ok(to)) = (developed_from, developed_to) {
-                with.push(Pair { from, to });
+            names.push(format!("{CONVERTED_DIR}/{name}"));
+        }
+
+        let mut with = Vec::new();
+        for name in names {
+            if let Some(pair) = pair(&from.parent(), dir, &name) {
+                with.push(pair);
             }
         }
 

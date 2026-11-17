@@ -33,6 +33,12 @@ Rules applied to the production code:
   argument (`&VfsPath`, `&dyn Log`) is passed to the method that needs it
   rather than stored. The `<'_>` in `fmt::Formatter<'_>` and
   `MutexGuard<'_, T>` are the standard library's own signatures.
+- No guard on a `match` arm (`Some(p) if cond =>`): the arm is plain and
+  the `if` sits inside it, so the order of the arms means nothing.
+- No `if let ... && ...` chain and no `if let (Ok(a), Ok(b)) = (x, y)`:
+  one condition per `if`, one value per `match`.
+- An item of a list is built by a named function (`border_item`,
+  `clean_item`, `sort_item`), not by a closure that spans several lines.
 - A pair with a meaning is a struct with named fields, not a tuple:
   `show::Group { dir, run, kept }`, not `(&str, Vec<&Item>)`.
 

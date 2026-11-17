@@ -113,14 +113,18 @@ fn tiff_date(b: &[u8]) -> Option<DateTime> {
     };
     let ifd0 = order.offset(b, 4)?;
 
-    // The camera's own date lives in the EXIF sub-directory; the one in
-    // IFD0 is the file's, which an editor may have rewritten.
-    if let Some(exif_ifd) = find_tag(b, order, ifd0, TAG_EXIF_IFD)
-        && let Some(t) = time_at(b, order, exif_ifd, TAG_DATE_TIME_ORIGINAL)
-    {
-        return Some(t);
+    // The camera's own date first; the one in IFD0 is the file's, which an
+    // editor may have rewritten.
+    match camera_date(b, order, ifd0) {
+        Some(t) => Some(t),
+        None => time_at(b, order, ifd0, TAG_DATE_TIME),
     }
-    time_at(b, order, ifd0, TAG_DATE_TIME)
+}
+
+/// The date the camera wrote, kept in the EXIF sub-directory IFD0 points to.
+fn camera_date(b: &[u8], order: Order, ifd0: usize) -> Option<DateTime> {
+    let exif_ifd = find_tag(b, order, ifd0, TAG_EXIF_IFD)?;
+    time_at(b, order, exif_ifd, TAG_DATE_TIME_ORIGINAL)
 }
 
 fn time_at(b: &[u8], order: Order, ifd: usize, tag: u16) -> Option<DateTime> {

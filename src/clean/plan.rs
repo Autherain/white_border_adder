@@ -117,9 +117,20 @@ fn entries(dir: &VfsPath) -> Result<Vec<Entry>, VfsError> {
 fn scan(dir: &VfsPath, o: &Options) -> Result<Listed, VfsError> {
     let entries = entries(dir)?;
 
-    let mut by_name: HashMap<String, &Entry> = HashMap::new();
+    let mut sidecars: HashMap<String, File> = HashMap::new();
+    let mut converted = None;
     for e in &entries {
-        by_name.insert(e.path.filename(), e);
+        let name = e.path.filename();
+        if name == CONVERTED_DIR {
+            converted = converted_names(e);
+        }
+        if e.is_file() && name.ends_with(SIDECAR_EXT) {
+            let sidecar = File {
+                path: e.path.clone(),
+                size: e.meta.len,
+            };
+            sidecars.insert(name, sidecar);
+        }
     }
 
     let mut got = Listed {
@@ -129,11 +140,10 @@ fn scan(dir: &VfsPath, o: &Options) -> Result<Listed, VfsError> {
         skipped: None,
     };
 
-    let converted = converted_names(by_name.get(CONVERTED_DIR).copied());
     match &converted {
-        Some(c) => {
+        Some(conv) => {
             for e in &entries {
-                if let Some(c) = candidate(e, &by_name, &c.names, o) {
+                if let Some(c) = candidate(e, &sidecars, &conv.names, o) {
                     got.candidates.push(c);
                 }
             }
@@ -216,7 +226,7 @@ fn waiting(dir: &VfsPath, entries: &[Entry], o: &Options) -> Skipped {
 
 fn candidate(
     e: &Entry,
-    by_name: &HashMap<String, &Entry>,
+    sidecars: &HashMap<String, File>,
     developed: &[String],
     o: &Options,
 ) -> Option<Candidate> {
@@ -230,15 +240,10 @@ fn candidate(
         return None;
     }
 
-    let mut sidecar = None;
-    if let Some(s) = by_name.get(&format!("{name}{SIDECAR_EXT}"))
-        && s.is_file()
-    {
-        sidecar = Some(File {
-            path: s.path.clone(),
-            size: s.meta.len,
-        });
-    }
+    let sidecar = match sidecars.get(&format!("{name}{SIDECAR_EXT}")) {
+        Some(file) => Some(file.clone()),
+        None => None,
+    };
 
     Some(Candidate {
         raw: File {
@@ -261,8 +266,7 @@ struct Converted {
 
 /// What converted/ holds, given its entry from the parent listing; `None`
 /// means "not a photo directory".
-fn converted_names(converted: Option<&Entry>) -> Option<Converted> {
-    let converted = converted?;
+fn converted_names(converted: &Entry) -> Option<Converted> {
     if !converted.is_dir() {
         return None;
     }

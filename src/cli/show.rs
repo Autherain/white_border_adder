@@ -112,16 +112,19 @@ impl App {
 
     fn show_item(&self, verb: Verb, it: &Item) {
         let would = self.palette.would(&format!("would {verb}"));
-        for (i, f) in it.files.iter().enumerate() {
-            match it.warn {
-                Some(warn) if i == 0 => {
+        let mut warn = it.warn;
+        for f in &it.files {
+            match warn {
+                Some(w) => {
                     self.log.info(&format!(
                         "{would} {f}  {}",
-                        self.palette.gone(&format!("{BANNER} {warn}"))
+                        self.palette.gone(&format!("{BANNER} {w}"))
                     ));
                 }
-                _ => self.log.info(&format!("{would} {f}")),
+                None => self.log.info(&format!("{would} {f}")),
             }
+            // The warning is about the item; its first file carries it.
+            warn = None;
         }
     }
 
