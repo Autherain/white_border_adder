@@ -41,33 +41,34 @@ fn top() -> std::path::PathBuf {
         Err(_) => Path::new("/").to_path_buf(),
     };
     let mut top = std::path::PathBuf::new();
-    for c in cwd.components() {
-        match c {
-            Component::Prefix(_) | Component::RootDir => top.push(c),
+    for component in cwd.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => top.push(component),
             _ => break,
         }
     }
     top
 }
 
+/// The path an argument names, on the filesystem rooted at `top`.
 fn locate(root: &VfsPath, arg: &str) -> anyhow::Result<VfsPath> {
     let abs = std::path::absolute(arg)?;
 
     // Keep only the real names ("home", "photos"); drop "/", "." and "..",
     // which `absolute` has already resolved.
-    let mut relation: Vec<&str> = Vec::new();
-    for c in abs.components() {
-        if !matches!(c, Component::Normal(_)) {
+    let mut names: Vec<&str> = Vec::new();
+    for component in abs.components() {
+        if !matches!(component, Component::Normal(_)) {
             continue;
         }
-        let name = match c.as_os_str().to_str() {
+        let name = match component.as_os_str().to_str() {
             Some(text) => text,
             None => anyhow::bail!("{arg}: not valid UTF-8"),
         };
-        relation.push(name);
+        names.push(name);
     }
 
-    let joined = relation.join("/");
+    let joined = names.join("/");
     let path = root.join(joined)?;
     Ok(path)
 }

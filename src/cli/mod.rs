@@ -3,6 +3,7 @@
 
 mod border;
 mod clean;
+mod recap;
 mod show;
 mod sort;
 mod style;
@@ -73,6 +74,8 @@ enum Verb {
 /// works on: the OS one in `main`, a tree in memory in the tests.
 pub type Locate = Box<dyn Fn(&str) -> anyhow::Result<VfsPath>>;
 
+/// What every verb needs to run: where to print, how to find a directory,
+/// and the flags shared by all verbs.
 struct App {
     // A trait object rather than a type parameter: the logger is a behaviour,
     // not a data type, and a generic `App<L>` would spread `<L>` over every
@@ -95,21 +98,10 @@ pub fn run(
 ) -> ExitCode {
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
-        Err(e) => {
-            let text = e.render();
-            if e.use_stderr() {
-                let _ = write!(err, "{text}");
-            } else {
-                let _ = write!(out, "{text}");
-            }
-            let code = match u8::try_from(e.exit_code()) {
-                Ok(c) => c,
-                Err(_) => 2,
-            };
-            return ExitCode::from(code);
-        }
+        Err(error) => return usage_error(&error, &mut out, &mut err),
     };
 
+    // These two print and leave: no directory, no plan, no App.
     match cli.verb {
         Verb::Version => {
             let _ = writeln!(out, "{VERSION}");
@@ -130,20 +122,40 @@ pub fn run(
         recursive: cli.shared.recursive,
     };
 
-    let result = match cli.verb {
+    run_verb(&app, cli.verb)
+}
+
+fn run_verb(app: &App, verb: Verb) -> ExitCode {
+    let result = match verb {
         Verb::Border(args) => app.border(args),
         Verb::Clean(args) => app.clean(args),
         Verb::Sort(args) => app.sort(args),
+        // Already answered in `run`, before the App existed.
         Verb::Version | Verb::Completion { .. } => Ok(()),
     };
 
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            app.log.error(&format!("{e:#}"));
-            ExitCode::FAILURE
-        }
+    if let Err(error) = result {
+        app.log.error(&format!("{error:#}"));
+        return ExitCode::FAILURE;
     }
+    ExitCode::SUCCESS
+}
+
+/// clap words its own messages. --help and --version come back as an
+/// "error" too, one that goes to stdout and exits 0.
+fn usage_error(error: &clap::Error, out: &mut Writer, err: &mut Writer) -> ExitCode {
+    let text = error.render();
+    if error.use_stderr() {
+        let _ = write!(err, "{text}");
+    } else {
+        let _ = write!(out, "{text}");
+    }
+    // 2 is clap's own code for a usage error.
+    let code = match u8::try_from(error.exit_code()) {
+        Ok(c) => c,
+        Err(_) => 2,
+    };
+    ExitCode::from(code)
 }
 
 impl App {
@@ -157,19 +169,19 @@ impl App {
     }
 }
 
-fn files(n: usize) -> String {
-    if n == 1 {
+fn files(count: usize) -> String {
+    if count == 1 {
         return "1 file".to_owned();
     }
-    format!("{n} files")
+    format!("{count} files")
 }
 
 /// The verb's error once it ran: how many items failed, or nothing.
-fn failures(n: usize) -> anyhow::Result<()> {
-    if n == 0 {
+fn failures(count: usize) -> anyhow::Result<()> {
+    if count == 0 {
         return Ok(());
     }
-    Err(anyhow::anyhow!("{} failed", files(n)))
+    Err(anyhow::anyhow!("{} failed", files(count)))
 }
 
 /// Rounds to the unit a photographer thinks in: raws are tens of MB.
@@ -179,13 +191,20 @@ fn human(bytes: u64) -> String {
     const MB: u64 = 1000 * KB;
     const GB: u64 = 1000 * MB;
 
-    match bytes {
-        b if b >= GB => format!("{:.1} GB", b as f64 / GB as f64),
-        b if b >= 10 * MB => format!("{} MB", (b + MB / 2) / MB),
-        b if b >= MB => format!("{:.1} MB", b as f64 / MB as f64),
-        b if b >= KB => format!("{} kB", (b + KB / 2) / KB),
-        b => format!("{b} B"),
+    if bytes >= GB {
+        return format!("{:.1} GB", bytes as f64 / GB as f64);
     }
+    // One decimal only below 10 MB, where it still tells two raws apart.
+    if bytes >= 10 * MB {
+        return format!("{} MB", (bytes + MB / 2) / MB);
+    }
+    if bytes >= MB {
+        return format!("{:.1} MB", bytes as f64 / MB as f64);
+    }
+    if bytes >= KB {
+        return format!("{} kB", (bytes + KB / 2) / KB);
+    }
+    format!("{bytes} B")
 }
 
 #[cfg(test)]

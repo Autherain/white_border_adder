@@ -1,7 +1,15 @@
-//! Photos filed under <year>/<day folder> by the date they were shot.
+//! `wba sort` files photos under <year>/<day folder> by the date they were
+//! shot.
+//!
+//! A card is emptied into one directory; sort sends each photo to
+//! 2025/20250804/ (or 2025/20250804_luchon/ when that folder exists), with
+//! its RawTherapee sidecar and its developed copies from converted/.
 
+mod day;
 mod exif;
+mod find;
 mod plan;
+mod planner;
 
 use std::fmt;
 
@@ -57,6 +65,7 @@ impl Dates for ExifOrMtime {
     }
 }
 
+/// One file to rename: where it is and where it goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pair {
     pub from: VfsPath,
@@ -70,21 +79,28 @@ pub struct Move {
     pub from: VfsPath,
     /// `None` when no target could be chosen; then `kept` says why.
     pub to: Option<VfsPath>,
+    /// The sidecar and the developed copies that follow the photo.
     pub with: Vec<Pair>,
     /// Why the photo stays where it is; kept moves stay in the plan so the
     /// recap can show what was left alone.
     pub kept: Option<Kept>,
 }
 
+/// Why a photo stays where it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kept {
+    /// Neither EXIF nor the file says when it was shot.
     NoDate,
+    /// The year holds several folders for that day (20250804_luchon and
+    /// 20250804_toulouse); choosing one is the owner's call.
     SeveralFolders {
         day: String,
         year: String,
         folders: Vec<String>,
     },
+    /// Another photo of this run already goes to the same target.
     SameNameAs(VfsPath),
+    /// The target already exists on disk, in the folder named.
     AlreadyIn(String),
 }
 
@@ -110,14 +126,15 @@ impl fmt::Display for Kept {
 pub enum Error {
     #[error("{0}: already exists")]
     Exists(String),
+    /// Several when companions failed after the photo itself had moved.
     #[error("{}", joined(.0))]
     Fs(Vec<VfsError>),
 }
 
-fn joined(errs: &[VfsError]) -> String {
+fn joined(errors: &[VfsError]) -> String {
     let mut texts = Vec::new();
-    for e in errs {
-        texts.push(e.to_string());
+    for error in errors {
+        texts.push(error.to_string());
     }
     texts.join("; ")
 }
@@ -153,7 +170,7 @@ impl Move {
     /// the caller to print.
     pub fn run(self) -> Result<Vec<Pair>, Failed> {
         let pairs = self.pairs();
-        match run(&pairs) {
+        match move_all(&pairs) {
             Ok(()) => Ok(pairs),
             Err(source) => Err(Failed {
                 from: self.from,
@@ -163,7 +180,33 @@ impl Move {
     }
 }
 
-fn run(pairs: &[Pair]) -> Result<(), Error> {
+fn move_all(pairs: &[Pair]) -> Result<(), Error> {
+    check_targets_free(pairs)?;
+
+    let mut errors = Vec::new();
+    for (index, pair) in pairs.iter().enumerate() {
+        let error = match move_one(pair) {
+            Ok(()) => continue,
+            Err(e) => e,
+        };
+        // The photo is the first pair. If it did not move, its companions
+        // stay with it; if it did, each one is still tried.
+        let is_photo = index == 0;
+        if is_photo {
+            return Err(Error::Fs(vec![error]));
+        }
+        errors.push(error);
+    }
+
+    if errors.is_empty() {
+        return Ok(());
+    }
+    Err(Error::Fs(errors))
+}
+
+/// Every target is checked before the first rename: a move is all or
+/// nothing as far as an existing file can decide it.
+fn check_targets_free(pairs: &[Pair]) -> Result<(), Error> {
     for pair in pairs {
         // A target that cannot be checked counts as taken.
         let exists = match pair.to.exists() {
@@ -174,23 +217,10 @@ fn run(pairs: &[Pair]) -> Result<(), Error> {
             return Err(Error::Exists(pair.to.as_str().to_owned()));
         }
     }
+    Ok(())
+}
 
-    let mut errs = Vec::new();
-    for (i, pair) in pairs.iter().enumerate() {
-        let mut moved = pair.to.parent().create_dir_all();
-        if moved.is_ok() {
-            moved = pair.from.move_file(&pair.to);
-        }
-        if let Err(e) = moved {
-            if i == 0 {
-                return Err(Error::Fs(vec![e]));
-            }
-            errs.push(e);
-        }
-    }
-
-    if errs.is_empty() {
-        return Ok(());
-    }
-    Err(Error::Fs(errs))
+fn move_one(pair: &Pair) -> Result<(), VfsError> {
+    pair.to.parent().create_dir_all()?;
+    pair.from.move_file(&pair.to)
 }

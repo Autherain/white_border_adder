@@ -18,15 +18,24 @@ const TAG_EXIF_IFD: u16 = 0x8769;
 const TAG_DATE_TIME_ORIGINAL: u16 = 0x9003;
 const TAG_DATE_TIME: u16 = 0x0132;
 const HEAD_SIZE: u64 = 256 << 10;
+/// An IFD (a TIFF directory) is a 2-byte entry count, then entries of 12
+/// bytes: tag (2), type (2), count (4), value or offset of the value (4).
 const IFD_ENTRY_SIZE: usize = 12;
+const IFD_ENTRY_TYPE_AT: usize = 2;
+const IFD_ENTRY_VALUE_AT: usize = 8;
 const TYPE_ASCII: u16 = 2;
 const TYPE_LONG: u16 = 4;
+/// "2025:08:04 12:30:00".
 const TIME_LEN: usize = 19;
+/// A corrupt count must not send the search through the whole head.
 const MAX_IFD_ENTRIES: u16 = 512;
 const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 const JPEG_APP1: u8 = 0xE1;
 const JPEG_SOS: u8 = 0xDA;
 const JPEG_SEGMENT_START: u8 = 0xFF;
+/// FF, the marker, then the size on two bytes.
+const JPEG_SEGMENT_HEADER: usize = 4;
+const JPEG_EXIF_MAGIC: &[u8] = b"Exif\0\0";
 
 pub fn shot_date(path: &VfsPath) -> Option<DateTime> {
     let head = read_head(path)?;
@@ -49,22 +58,28 @@ fn read_head(path: &VfsPath) -> Option<Vec<u8>> {
     Some(head)
 }
 
-fn jpeg_exif(b: &[u8]) -> Option<&[u8]> {
-    let mut i = 2;
-    while i + 4 <= b.len() {
-        if b[i] != JPEG_SEGMENT_START {
+/// The TIFF block a JPEG carries. A JPEG is a row of segments, each one
+/// `FF <marker> <size> <payload>`; EXIF is the APP1 segment whose payload
+/// opens with "Exif\0\0", and the TIFF block is what follows.
+fn jpeg_exif(head: &[u8]) -> Option<&[u8]> {
+    let mut segment = JPEG_SOI.len();
+    while segment + JPEG_SEGMENT_HEADER <= head.len() {
+        if head[segment] != JPEG_SEGMENT_START {
             return None;
         }
-        let marker = b[i + 1];
-        let size = usize::from(u16::from_be_bytes([b[i + 2], b[i + 3]]));
+        let marker = head[segment + 1];
+        // The size counts its own two bytes but not FF and the marker.
+        let size = usize::from(u16::from_be_bytes([head[segment + 2], head[segment + 3]]));
+        // SOS opens the picture itself: no metadata comes after it.
         if marker == JPEG_SOS || size < 2 {
             return None;
         }
-        let end = usize::min(i + 2 + size, b.len());
-        if marker == JPEG_APP1 && b[i + 4..end].starts_with(b"Exif\0\0") {
-            return b.get(i + 10..end);
+        let payload = segment + JPEG_SEGMENT_HEADER;
+        let end = usize::min(segment + 2 + size, head.len());
+        if marker == JPEG_APP1 && head[payload..end].starts_with(JPEG_EXIF_MAGIC) {
+            return head.get(payload + JPEG_EXIF_MAGIC.len()..end);
         }
-        i += 2 + size;
+        segment += 2 + size;
     }
     None
 }
@@ -77,8 +92,8 @@ enum Order {
 }
 
 impl Order {
-    fn u16(self, b: &[u8], at: usize) -> Option<u16> {
-        let bytes = b.get(at..at + 2)?;
+    fn u16(self, tiff: &[u8], at: usize) -> Option<u16> {
+        let bytes = tiff.get(at..at + 2)?;
         let pair = [bytes[0], bytes[1]];
         match self {
             Self::Little => Some(u16::from_le_bytes(pair)),
@@ -86,8 +101,8 @@ impl Order {
         }
     }
 
-    fn u32(self, b: &[u8], at: usize) -> Option<u32> {
-        let bytes = b.get(at..at + 4)?;
+    fn u32(self, tiff: &[u8], at: usize) -> Option<u32> {
+        let bytes = tiff.get(at..at + 4)?;
         let quad = [bytes[0], bytes[1], bytes[2], bytes[3]];
         match self {
             Self::Little => Some(u32::from_le_bytes(quad)),
@@ -96,8 +111,8 @@ impl Order {
     }
 
     /// A u32 used as a position in the file.
-    fn offset(self, b: &[u8], at: usize) -> Option<usize> {
-        let value = self.u32(b, at)?;
+    fn offset(self, tiff: &[u8], at: usize) -> Option<usize> {
+        let value = self.u32(tiff, at)?;
         match usize::try_from(value) {
             Ok(off) => Some(off),
             Err(_) => None,
@@ -105,63 +120,68 @@ impl Order {
     }
 }
 
-fn tiff_date(b: &[u8]) -> Option<DateTime> {
-    let order = match b.get(..2)? {
+/// The date in a TIFF block: byte order on 2 bytes, a magic number on 2,
+/// then the offset of the first directory, IFD0.
+fn tiff_date(tiff: &[u8]) -> Option<DateTime> {
+    let order = match tiff.get(..2)? {
         b"II" => Order::Little,
         b"MM" => Order::Big,
         _ => return None,
     };
-    let ifd0 = order.offset(b, 4)?;
+    let ifd0 = order.offset(tiff, 4)?;
 
     // The camera's own date first; the one in IFD0 is the file's, which an
     // editor may have rewritten.
-    match camera_date(b, order, ifd0) {
+    match camera_date(tiff, order, ifd0) {
         Some(t) => Some(t),
-        None => time_at(b, order, ifd0, TAG_DATE_TIME),
+        None => time_at(tiff, order, ifd0, TAG_DATE_TIME),
     }
 }
 
 /// The date the camera wrote, kept in the EXIF sub-directory IFD0 points to.
-fn camera_date(b: &[u8], order: Order, ifd0: usize) -> Option<DateTime> {
-    let exif_ifd = find_tag(b, order, ifd0, TAG_EXIF_IFD)?;
-    time_at(b, order, exif_ifd, TAG_DATE_TIME_ORIGINAL)
+fn camera_date(tiff: &[u8], order: Order, ifd0: usize) -> Option<DateTime> {
+    let exif_ifd = find_tag(tiff, order, ifd0, TAG_EXIF_IFD)?;
+    time_at(tiff, order, exif_ifd, TAG_DATE_TIME_ORIGINAL)
 }
 
-fn time_at(b: &[u8], order: Order, ifd: usize, tag: u16) -> Option<DateTime> {
-    let off = find_tag(b, order, ifd, tag)?;
-    let bytes = b.get(off..off + TIME_LEN)?;
-    let text = match std::str::from_utf8(bytes) {
+/// The date a tag of this directory points to.
+fn time_at(tiff: &[u8], order: Order, ifd: usize, tag: u16) -> Option<DateTime> {
+    let off = find_tag(tiff, order, ifd, tag)?;
+    let ascii = tiff.get(off..off + TIME_LEN)?;
+    let text = match std::str::from_utf8(ascii) {
         Ok(t) => t,
         Err(_) => return None,
     };
-    let t = match DateTime::strptime("%Y:%m:%d %H:%M:%S", text) {
+    let time = match DateTime::strptime("%Y:%m:%d %H:%M:%S", text) {
         Ok(t) => t,
         Err(_) => return None,
     };
-    if t.year() <= 1970 {
+    // A date at or before the epoch is a clock that was never set; no date
+    // is better than filing the photo under 1970.
+    if time.year() <= 1970 {
         return None;
     }
-    Some(t)
+    Some(time)
 }
 
 /// The value field of a tag: the offset it holds for an ASCII string or a
 /// pointer, which is what both callers want.
-fn find_tag(b: &[u8], order: Order, ifd: usize, tag: u16) -> Option<usize> {
+fn find_tag(tiff: &[u8], order: Order, ifd: usize, tag: u16) -> Option<usize> {
     if ifd == 0 {
         return None;
     }
-    let count = order.u16(b, ifd)?.min(MAX_IFD_ENTRIES);
+    let count = order.u16(tiff, ifd)?.min(MAX_IFD_ENTRIES);
 
-    for i in 0..usize::from(count) {
-        let e = ifd + 2 + i * IFD_ENTRY_SIZE;
-        if order.u16(b, e)? != tag {
+    for index in 0..usize::from(count) {
+        let entry = ifd + 2 + index * IFD_ENTRY_SIZE;
+        if order.u16(tiff, entry)? != tag {
             continue;
         }
-        let kind = order.u16(b, e + 2)?;
+        let kind = order.u16(tiff, entry + IFD_ENTRY_TYPE_AT)?;
         if kind != TYPE_ASCII && kind != TYPE_LONG {
             return None;
         }
-        return order.offset(b, e + 8);
+        return order.offset(tiff, entry + IFD_ENTRY_VALUE_AT);
     }
     None
 }

@@ -68,7 +68,7 @@ pub(crate) struct CleanArgs {
 impl App {
     pub(crate) fn clean(&self, args: CleanArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
-        let o = Options {
+        let options = Options {
             pattern: args.pattern,
             exclude: args.exclude,
             only: args.only,
@@ -76,34 +76,19 @@ impl App {
             bordered: args.bordered,
         };
 
-        let plan = crate::clean::plan(&*self.log, &dir, &o)?;
-        let skips: Vec<show::Skipped> = plan
-            .skipped
-            .iter()
-            .map(|sk| skipped_item(&dir, sk))
-            .collect();
-
+        let plan = crate::clean::plan(&*self.log, &dir, &options)?;
+        let skips = skipped_items(&dir, &plan.skipped);
         if plan.candidates.is_empty() && skips.is_empty() {
             self.log.info(&self.palette.faint("nothing to do"));
             return Ok(());
         }
 
-        let items: Vec<Item> = plan
-            .candidates
-            .iter()
-            .map(|c| clean_item(&dir, c))
-            .collect();
+        let items = clean_items(&dir, &plan.candidates);
         if !self.show(Verb::Delete, &items, &skips) {
             return Ok(());
         }
 
-        let mut to_delete = Vec::new();
-        for c in plan.candidates {
-            if c.kept.is_none() {
-                to_delete.push(c);
-            }
-        }
-        let failed = self.delete_all(&dir, to_delete);
+        let failed = self.delete_all(&dir, not_kept(plan.candidates));
         for line in self.recap(Verb::Delete, &items, &skips, Stage::Finished) {
             self.log.info(&line);
         }
@@ -114,21 +99,21 @@ impl App {
     /// the rest goes on.
     fn delete_all(&self, dir: &vfs::VfsPath, candidates: Vec<Candidate>) -> usize {
         let mut failed = 0;
-        for c in candidates {
-            match c.delete() {
+        for candidate in candidates {
+            match candidate.delete() {
                 Ok(removed) => {
-                    for p in removed {
+                    for path in removed {
                         self.log.info(&format!(
                             "{} {}",
                             self.palette.gone("deleted"),
-                            Self::rel(dir, &p)
+                            Self::rel(dir, &path)
                         ));
                     }
                 }
-                Err(e) => {
+                Err(failure) => {
                     failed += 1;
-                    self.log
-                        .error(&format!("{}: {}", Self::rel(dir, &e.path), e.source));
+                    let path = Self::rel(dir, &failure.path);
+                    self.log.error(&format!("{path}: {}", failure.source));
                 }
             }
         }
@@ -136,37 +121,69 @@ impl App {
     }
 }
 
-fn clean_item(dir: &vfs::VfsPath, c: &Candidate) -> Item {
-    let mut files = Vec::new();
-    for f in c.files() {
-        files.push(crate::path::relative(dir, &f.path));
+fn not_kept(candidates: Vec<Candidate>) -> Vec<Candidate> {
+    let mut to_delete = Vec::new();
+    for candidate in candidates {
+        if candidate.kept.is_none() {
+            to_delete.push(candidate);
+        }
     }
+    to_delete
+}
+
+fn clean_items(dir: &vfs::VfsPath, candidates: &[Candidate]) -> Vec<Item> {
+    let mut items = Vec::new();
+    for candidate in candidates {
+        items.push(clean_item(dir, candidate));
+    }
+    items
+}
+
+fn skipped_items(dir: &vfs::VfsPath, skipped: &[Skipped]) -> Vec<show::Skipped> {
+    let mut items = Vec::new();
+    for one in skipped {
+        items.push(skipped_item(dir, one));
+    }
+    items
+}
+
+/// The printed form of a candidate: its files and its folder, relative to
+/// the argument.
+fn clean_item(dir: &vfs::VfsPath, candidate: &Candidate) -> Item {
+    let mut files = Vec::new();
+    for file in candidate.files() {
+        files.push(crate::path::relative(dir, &file.path));
+    }
+    // A sidecar without an export means time was spent on this raw in
+    // RawTherapee; worth a look before it goes.
+    let mut warn = None;
+    if candidate.sidecar.is_some() {
+        warn = Some(Warn::EditedNeverExported);
+    }
+    let kept = match &candidate.kept {
+        Some(why) => Some(why.to_string()),
+        None => None,
+    };
     Item {
-        dir: crate::path::relative(dir, &c.raw.path.parent()),
+        dir: crate::path::relative(dir, &candidate.file.path.parent()),
         files,
-        size: c.size(),
-        // A sidecar without an export means time was spent on this raw in
-        // RawTherapee; worth a look before it goes.
-        warn: if c.sidecar.is_some() {
-            Some(Warn::EditedNeverExported)
-        } else {
-            None
-        },
-        kept: match &c.kept {
-            Some(why) => Some(why.to_string()),
-            None => None,
-        },
+        size: candidate.size(),
+        warn,
+        kept,
     }
 }
 
-fn skipped_item(dir: &vfs::VfsPath, sk: &Skipped) -> show::Skipped {
-    let raws = if sk.raws == 1 { "raw" } else { "raws" };
+fn skipped_item(dir: &vfs::VfsPath, skipped: &Skipped) -> show::Skipped {
+    let mut raws = "raws";
+    if skipped.raws == 1 {
+        raws = "raw";
+    }
     show::Skipped {
-        dir: crate::path::relative(dir, &sk.dir),
+        dir: crate::path::relative(dir, &skipped.dir),
         detail: format!(
             "{} {raws}, {}, no converted/: not sorted yet",
-            sk.raws,
-            human(sk.size)
+            skipped.raws,
+            human(skipped.size)
         ),
     }
 }

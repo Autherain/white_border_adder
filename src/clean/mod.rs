@@ -1,6 +1,14 @@
-//! Raws that RawTherapee never developed, and the sidecars that go with them.
+//! `wba clean` deletes the rejects of a shoot.
+//!
+//! A shoot is a directory of raws. The photos worth keeping are developed in
+//! RawTherapee, which writes each image to `converted/` and a `.pp3` sidecar
+//! (the editing settings) beside the raw. A raw with nothing in `converted/`
+//! was never developed: it is a reject, and clean deletes it with its sidecar.
 
+mod bordered;
 mod plan;
+mod rejects;
+mod scan;
 
 use std::fmt;
 
@@ -31,15 +39,18 @@ pub struct File {
     pub size: u64,
 }
 
+/// One thing clean would delete: a reject raw with its sidecar, or under
+/// --bordered an Instagram copy. "Candidate" because --exclude and --only can
+/// still spare it, see `kept`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
-    pub raw: File,
+    /// The raw, or the Instagram copy.
+    pub file: File,
+    /// The raw's `.pp3`, deleted with it. A copy has none.
     pub sidecar: Option<File>,
     /// Why this candidate stays. Kept candidates stay in the plan so the
     /// caller can say what was spared.
     pub kept: Option<Kept>,
-    /// An Instagram copy rather than a raw; it has no sidecar.
-    pub bordered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,7 +65,10 @@ impl fmt::Display for Kept {
             Self::Excluded(g) => write!(f, "--exclude {g}"),
             Self::NotInOnly(globs) => {
                 f.write_str("not in --only")?;
-                globs.iter().try_for_each(|g| write!(f, " {g}"))
+                for glob in globs {
+                    write!(f, " {glob}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -85,9 +99,9 @@ pub struct Failed {
 }
 
 impl Candidate {
-    /// The raw, then the sidecar when present: what `delete` removes.
+    /// The file, then the sidecar when present: what `delete` removes.
     pub fn files(&self) -> Vec<&File> {
-        let mut files = vec![&self.raw];
+        let mut files = vec![&self.file];
         if let Some(sidecar) = &self.sidecar {
             files.push(sidecar);
         }
@@ -102,7 +116,7 @@ impl Candidate {
         total
     }
 
-    /// Removes the raw and its sidecar. The candidate is consumed: a deleted
+    /// Removes the file and its sidecar. The candidate is consumed: a deleted
     /// file cannot be deleted twice. The paths removed come back for the
     /// caller to print; the first failure stops the rest.
     pub fn delete(self) -> Result<Vec<VfsPath>, Failed> {
@@ -118,8 +132,11 @@ impl Candidate {
                 });
             }
         }
-        if self.bordered {
-            remove_if_empty(&self.raw.path.parent());
+        // A bordered folder exists only to hold copies: once the last one
+        // is gone it goes too. A shoot folder is never removed.
+        let folder = self.file.path.parent();
+        if bordered::is_bordered_dir(&folder.filename()) {
+            remove_if_empty(&folder);
         }
         Ok(files)
     }

@@ -20,25 +20,29 @@ pub enum Error {
 /// Lists the images under `dir` and where their bordered copy goes. Nothing
 /// is written; `Job::run` does that. Skipped files are reported on `log` at
 /// debug level.
-pub fn plan(log: &dyn Log, dir: &VfsPath, o: &Options) -> Result<Vec<Job>, Error> {
+pub fn plan(log: &dyn Log, dir: &VfsPath, options: &Options) -> Result<Vec<Job>, Error> {
     if !dir.is_dir()? {
         return Err(Error::NotADirectory(dir.as_str().to_owned()));
     }
 
-    let mut p = Planner {
-        dir: dir.clone(),
-        o: o.clone(),
+    let mut planner = Planner {
+        root: dir.clone(),
+        options: options.clone(),
         jobs: Vec::new(),
     };
-    p.scan(log, dir)?;
-    p.jobs
+    planner.scan(log, dir)?;
+    planner
+        .jobs
         .sort_by(|a, b| a.input.as_str().cmp(b.input.as_str()));
-    Ok(p.jobs)
+    Ok(planner.jobs)
 }
 
+/// Collects the jobs while the walk recurses.
 struct Planner {
-    dir: VfsPath,
-    o: Options,
+    /// The directory `plan` was given; skipped files are reported relative
+    /// to it.
+    root: VfsPath,
+    options: Options,
     jobs: Vec<Job>,
 }
 
@@ -51,15 +55,15 @@ impl Planner {
             Ok(entries) => entries.collect(),
             Err(e) => return Err(Error::Read(dir.as_str().to_owned(), e)),
         };
-        let existing = self.existing(dir)?;
+        let existing = self.existing_outputs(dir)?;
 
         for entry in entries {
             if entry.is_dir()? {
-                if self.o.recursive && !self.skip_dir(&entry.filename()) {
+                if self.options.recursive && !self.holds_no_photos(&entry.filename()) {
                     self.scan(log, &entry)?;
                 }
             } else if entry.is_file()? {
-                self.add(log, dir, entry, &existing);
+                self.add_job(log, dir, entry, &existing);
             }
         }
         Ok(())
@@ -68,8 +72,8 @@ impl Planner {
     /// What the output directory already holds, so that checking each image
     /// costs a set lookup instead of a stat. A missing output directory holds
     /// nothing; `force` makes the question moot.
-    fn existing(&self, photo_dir: &VfsPath) -> Result<HashSet<String>, Error> {
-        if self.o.force {
+    fn existing_outputs(&self, photo_dir: &VfsPath) -> Result<HashSet<String>, Error> {
+        if self.options.force {
             return Ok(HashSet::new());
         }
 
@@ -85,8 +89,8 @@ impl Planner {
         };
 
         let mut names = HashSet::new();
-        for e in entries {
-            names.insert(e.filename());
+        for entry in entries {
+            names.insert(entry.filename());
         }
         Ok(names)
     }
@@ -94,12 +98,13 @@ impl Planner {
     /// Keeps the walk out of hidden directories and of wba's own outputs, so
     /// a second run never borders a bordered copy. RawTherapee's converted/
     /// is entered on purpose: that is where the exports to border live.
-    fn skip_dir(&self, name: &str) -> bool {
-        name.starts_with('.') || name == LEGACY_OUT || name == self.out_base()
+    fn holds_no_photos(&self, name: &str) -> bool {
+        name.starts_with('.') || name == LEGACY_OUT || name == self.out_dir_name()
     }
 
-    fn out_base(&self) -> String {
-        match &self.o.out {
+    /// --out may be a path (web/bordered); the walk meets its last name.
+    fn out_dir_name(&self) -> String {
+        match &self.options.out {
             Out::Beside(rel) => match rel.rfind('/') {
                 Some(slash) => rel[slash + 1..].to_owned(),
                 None => rel.to_owned(),
@@ -109,36 +114,50 @@ impl Planner {
     }
 
     fn out_dir(&self, photo_dir: &VfsPath) -> Result<VfsPath, VfsError> {
-        match &self.o.out {
+        match &self.options.out {
             Out::Beside(rel) => photo_dir.join(rel),
             Out::At(path) => Ok(path.clone()),
         }
     }
 
-    fn add(&mut self, log: &dyn Log, dir: &VfsPath, input: VfsPath, existing: &HashSet<String>) {
+    /// Adds the job of one file, unless it is not an image or its copy is
+    /// already there.
+    fn add_job(
+        &mut self,
+        log: &dyn Log,
+        dir: &VfsPath,
+        input: VfsPath,
+        existing: &HashSet<String>,
+    ) {
         let name = input.filename();
         if !is_image(&name) {
             return;
         }
 
-        let out_name = format!("{}{name}", self.o.prefix);
+        let out_name = format!("{}{name}", self.options.prefix);
         if existing.contains(&out_name) {
             log.debug(&format!(
                 "skip {}: output exists",
-                relative(&self.dir, &input)
+                relative(&self.root, &input)
             ));
             return;
         }
 
-        let out_dir = match self.out_dir(dir) {
+        if let Some(output) = self.output(dir, &out_name) {
+            self.jobs.push(Job { input, output });
+        }
+    }
+
+    /// `None` when the name cannot be joined; the file is then left out.
+    fn output(&self, photo_dir: &VfsPath, out_name: &str) -> Option<VfsPath> {
+        let out_dir = match self.out_dir(photo_dir) {
             Ok(d) => d,
-            Err(_) => return,
+            Err(_) => return None,
         };
-        let output = match out_dir.join(&out_name) {
-            Ok(p) => p,
-            Err(_) => return,
-        };
-        self.jobs.push(Job { input, output });
+        match out_dir.join(out_name) {
+            Ok(path) => Some(path),
+            Err(_) => None,
+        }
     }
 }
 

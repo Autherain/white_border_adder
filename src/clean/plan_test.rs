@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use crate::clean::{Candidate, File};
 use crate::glob::Glob;
 use crate::log::{MockLog, Silent};
 use crate::testfs::{files, new_tree};
@@ -35,7 +36,7 @@ fn to_delete(plan: Plan) -> Vec<Candidate> {
 
 fn raw_paths(cs: &[Candidate]) -> Vec<String> {
     cs.iter()
-        .map(|c| c.raw.path.as_str().trim_start_matches('/').to_owned())
+        .map(|c| c.file.path.as_str().trim_start_matches('/').to_owned())
         .collect()
 }
 
@@ -293,7 +294,7 @@ fn sizes() {
     ]);
     let plan = plan(&Silent, &at(&root, "paris"), &options()).unwrap();
     let want = vec![Candidate {
-        raw: File {
+        file: File {
             path: at(&root, "paris/IMG_1271.RW2"),
             size: 5,
         },
@@ -302,7 +303,6 @@ fn sizes() {
             size: 3,
         }),
         kept: None,
-        bordered: false,
     }];
     assert_eq!(plan.candidates, want);
     assert_eq!(plan.candidates[0].size(), 8);
@@ -573,7 +573,7 @@ fn only_keeps_everything_else_and_exclude_wins() {
                     case.kept,
                     "{}: {}",
                     case.name,
-                    c.raw.path.as_str()
+                    c.file.path.as_str()
                 );
             }
         }

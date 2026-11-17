@@ -60,32 +60,26 @@ impl App {
     pub(crate) fn sort(&self, args: SortArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
         let mut sources = Vec::new();
-        for s in &args.sources {
-            sources.push(self.locate(s)?);
+        for source in &args.sources {
+            sources.push(self.locate(source)?);
         }
-        let o = Options {
+        let options = Options {
             recursive: self.recursive,
             exclude: args.exclude,
         };
 
-        let moves = crate::sorter::plan(&*self.log, &ExifOrMtime, &dir, &sources, &o)?;
+        let moves = crate::sorter::plan(&*self.log, &ExifOrMtime, &dir, &sources, &options)?;
         if moves.is_empty() {
             self.log.info(&self.palette.faint("nothing to do"));
             return Ok(());
         }
 
-        let items: Vec<Item> = moves.iter().map(|m| sort_item(&dir, m)).collect();
+        let items = sort_items(&dir, &moves);
         if !self.show(Verb::Move, &items, &[]) {
             return Ok(());
         }
 
-        let mut to_run = Vec::new();
-        for m in moves {
-            if m.kept.is_none() {
-                to_run.push(m);
-            }
-        }
-        let failed = self.move_all(&dir, to_run);
+        let failed = self.move_all(&dir, not_kept(moves));
         for line in self.recap(Verb::Move, &items, &[], Stage::Finished) {
             self.log.info(&line);
         }
@@ -94,23 +88,23 @@ impl App {
 
     fn move_all(&self, dir: &VfsPath, moves: Vec<Move>) -> usize {
         let mut failed = 0;
-        for m in moves {
-            match m.run() {
+        for planned in moves {
+            match planned.run() {
                 Ok(pairs) => {
-                    for p in pairs {
+                    for pair in pairs {
                         let line = format!(
                             "{} {} -> {}",
                             self.palette.done("moved"),
-                            Self::rel(dir, &p.from),
-                            Self::rel(dir, &p.to)
+                            Self::rel(dir, &pair.from),
+                            Self::rel(dir, &pair.to)
                         );
                         self.log.info(&line);
                     }
                 }
-                Err(e) => {
+                Err(failure) => {
                     failed += 1;
-                    self.log
-                        .error(&format!("{}: {}", Self::rel(dir, &e.from), e.source));
+                    let from = Self::rel(dir, &failure.from);
+                    self.log.error(&format!("{from}: {}", failure.source));
                 }
             }
         }
@@ -118,38 +112,58 @@ impl App {
     }
 }
 
-fn sort_item(dir: &VfsPath, m: &Move) -> Item {
-    let kept = match &m.kept {
+fn not_kept(moves: Vec<Move>) -> Vec<Move> {
+    let mut to_run = Vec::new();
+    for planned in moves {
+        if planned.kept.is_none() {
+            to_run.push(planned);
+        }
+    }
+    to_run
+}
+
+fn sort_items(dir: &VfsPath, moves: &[Move]) -> Vec<Item> {
+    let mut items = Vec::new();
+    for planned in moves {
+        items.push(sort_item(dir, planned));
+    }
+    items
+}
+
+/// The printed form of a move: one "from -> to" line per file, grouped
+/// under the folder the photo goes to.
+fn sort_item(dir: &VfsPath, planned: &Move) -> Item {
+    let kept = match &planned.kept {
         Some(why) => Some(why.to_string()),
         None => None,
     };
-
-    let to = match &m.to {
+    let to = match &planned.to {
         Some(to) => to,
-        // A kept move without a target touches nothing and is listed by
-        // its source.
-        None => {
-            return Item {
-                dir: relative(dir, &m.from.parent()),
-                files: vec![relative(dir, &m.from)],
-                size: 0,
-                warn: None,
-                kept,
-            };
-        }
+        None => return unmoved_item(dir, planned, kept),
     };
 
     let mut files = Vec::new();
-    for p in m.pairs() {
+    for pair in planned.pairs() {
         files.push(format!(
             "{} -> {}",
-            relative(dir, &p.from),
-            relative(dir, &p.to)
+            relative(dir, &pair.from),
+            relative(dir, &pair.to)
         ));
     }
     Item {
         dir: relative(dir, &to.parent()),
         files,
+        size: 0,
+        warn: None,
+        kept,
+    }
+}
+
+/// A kept move without a target touches nothing and is listed by its source.
+fn unmoved_item(dir: &VfsPath, planned: &Move, kept: Option<String>) -> Item {
+    Item {
+        dir: relative(dir, &planned.from.parent()),
+        files: vec![relative(dir, &planned.from)],
         size: 0,
         warn: None,
         kept,

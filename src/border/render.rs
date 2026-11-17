@@ -24,16 +24,16 @@ pub struct Decoded {
 
 /// Fits an `orig_w` x `orig_h` image inside the canvas minus its borders and
 /// centres it. A square image counts as portrait, as in the original tool.
-pub fn layout(orig_w: u32, orig_h: u32, o: &Options) -> Rect {
-    let ratios = if orig_w > orig_h {
-        o.landscape
-    } else {
-        o.portrait
-    };
+pub fn layout(orig_w: u32, orig_h: u32, options: &Options) -> Rect {
+    let mut ratios = options.portrait;
+    if orig_w > orig_h {
+        ratios = options.landscape;
+    }
+    // A ratio is one border; each axis has two.
     let sides = 2.0;
 
-    let avail_w = f64::from(o.width) * (1.0 - sides * ratios.horiz);
-    let avail_h = f64::from(o.height) * (1.0 - sides * ratios.vert);
+    let avail_w = f64::from(options.width) * (1.0 - sides * ratios.horiz);
+    let avail_h = f64::from(options.height) * (1.0 - sides * ratios.vert);
     let scale = f64::min(avail_w / f64::from(orig_w), avail_h / f64::from(orig_h));
 
     // Truncation is the intent: the photo never outgrows the available area.
@@ -44,8 +44,8 @@ pub fn layout(orig_w: u32, orig_h: u32, o: &Options) -> Rect {
     );
 
     Rect {
-        x: (o.width - width) / 2,
-        y: (o.height - height) / 2,
+        x: (options.width - width) / 2,
+        y: (options.height - height) / 2,
         width,
         height,
     }
@@ -54,30 +54,30 @@ pub fn layout(orig_w: u32, orig_h: u32, o: &Options) -> Rect {
 /// The photo scaled and centred on a white canvas. The layout is computed
 /// from the decoded size, which for a JPEG may already be reduced: the
 /// ratio is the same, so the frame is the same.
-pub fn render(img: Decoded, o: &Options) -> Result<RgbaImage, Error> {
-    let at = layout(img.width, img.height, o);
-    let small = resize(img, at.width, at.height)?;
+pub fn render(img: Decoded, options: &Options) -> Result<RgbaImage, Error> {
+    let photo = layout(img.width, img.height, options);
+    let scaled = resize(img, photo.width, photo.height)?;
 
-    let mut canvas = RgbaImage::from_pixel(o.width, o.height, Rgba([255, 255, 255, 255]));
-    imageops::overlay(&mut canvas, &small, i64::from(at.x), i64::from(at.y));
+    let white = Rgba([255, 255, 255, 255]);
+    let mut canvas = RgbaImage::from_pixel(options.width, options.height, white);
+    imageops::overlay(&mut canvas, &scaled, i64::from(photo.x), i64::from(photo.y));
     Ok(canvas)
 }
 
-/// Bilinear on SIMD lanes: the photo only ever shrinks, so a wider filter
-/// buys nothing visible.
 const WRONG_SIZE: &str = "resized buffer has the wrong size";
 
+/// Bilinear on SIMD lanes: the photo only ever shrinks, so a wider filter
+/// buys nothing visible.
 fn resize(img: Decoded, width: u32, height: u32) -> Result<RgbaImage, Error> {
-    let kind = if img.alpha {
-        PixelType::U8x4
-    } else {
-        PixelType::U8x3
-    };
-    let src = match Image::from_vec_u8(img.width, img.height, img.pixels, kind) {
+    let mut pixel_type = PixelType::U8x3;
+    if img.alpha {
+        pixel_type = PixelType::U8x4;
+    }
+    let src = match Image::from_vec_u8(img.width, img.height, img.pixels, pixel_type) {
         Ok(s) => s,
         Err(e) => return Err(Error::Pixels(e)),
     };
-    let mut dst = Image::new(width, height, kind);
+    let mut dst = Image::new(width, height, pixel_type);
 
     let bilinear = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear));
     if let Err(e) = Resizer::new().resize(&src, &mut dst, &bilinear) {

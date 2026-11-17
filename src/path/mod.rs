@@ -37,8 +37,15 @@ pub fn relative(base: &VfsPath, path: &VfsPath) -> String {
     parts.join("/")
 }
 
+/// A leading or doubled `/` leaves an empty piece, which is not a name.
 fn segments(path: &str) -> Vec<&str> {
-    path.split('/').filter(|s| !s.is_empty()).collect()
+    let mut names = Vec::new();
+    for piece in path.split('/') {
+        if !piece.is_empty() {
+            names.push(piece);
+        }
+    }
+    names
 }
 
 /// The name without its last extension: `IMG_1264.RW2.pp3` is `IMG_1264.RW2`.

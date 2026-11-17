@@ -18,10 +18,21 @@ Rules applied to the production code:
 - `.unwrap()` never appears outside tests; clippy's `unwrap_used` is on.
   A value that cannot be absent is still taken out with a `match` whose
   other arm says what happens.
-- An iterator chain stops at one step: `.iter().map(f).collect()` or
-  `.iter().filter(p).count()` are fine, two closures in a row are not.
-- Closures are for the thing that is a callback (`run_each`, `sort_by`,
-  `dated(name)`), never a way to skip naming a variable.
+- No iterator chain: a `for` loop builds the list, counts or sums, as in
+  Go. `.iter().map(f).collect()`, `.any(p)`, `.filter(p)` and `.sum()` are
+  loops in a named function (`clean_items`, `is_developed`, `file_count`).
+  `for (i, x) in list.iter().enumerate()` is Go's `for i, x := range` and
+  stays.
+- A function either calls named steps or does one loop, and fits a screen:
+  past about 30 lines it is split. `plan` reads as its steps
+  (`sorter::plan` is seven lines). A `plan.rs` holds the walk only; what
+  is found in one directory lives in its own file (`clean/scan.rs`,
+  `clean/rejects.rs`, `sorter/find.rs`, `sorter/planner.rs`).
+- Names are whole words: `options`, `entry`, `candidate`, never `o`, `e`,
+  `c`. The `a` and `b` of a `sort_by` closure are the exception.
+- Closures are for the thing that is a callback (`run_each`, `sort_by`),
+  never a way to skip naming a variable. A test used in several places is
+  a method on a struct (`Day::names`), not a closure passed around.
 - Tests use `.unwrap()`: a fixture that fails to build is a broken test,
   not a case to handle.
 
@@ -65,8 +76,20 @@ Three rules decide how a fallible call is written:
    from removing one without the other. A `match` does both at once.
 
 A function whose last statement is `if c { a } else { b }` returns early
-instead: `if c { return a; } b`. The `let x = if c { a } else { b };`
-form stays: it is the ternary Go does not have.
+instead: `if c { return a; } b`.
+
+An `if` is a statement, never a value: no `let x = if c { a } else { b };`.
+The variable takes the common case and a plain `if` overrides it, as in Go:
+
+```rust
+let mut ratios = options.portrait;
+if orig_w > orig_h {
+    ratios = options.landscape;
+}
+```
+
+When the branches do work rather than pick a value, the first one returns
+early (`border::encode`).
 
 The shapes that come back often:
 

@@ -72,13 +72,13 @@ impl Glob {
 /// targets a shoot. `rel` is the path below the argument, with `/`.
 pub fn matching(rel: &str, globs: &[Glob]) -> Option<Glob> {
     let stem = stem_of(rel);
-    for g in globs {
-        if g.matches(&stem) {
-            return Some(g.clone());
+    for glob in globs {
+        if glob.matches(&stem) {
+            return Some(glob.clone());
         }
         for part in stem.split('/') {
-            if g.matches(part) {
-                return Some(g.clone());
+            if glob.matches(part) {
+                return Some(glob.clone());
             }
         }
     }

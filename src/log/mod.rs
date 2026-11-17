@@ -7,6 +7,7 @@ use std::sync::Mutex;
 /// list and can be grepped.
 pub const BANNER: &str = "#######";
 
+/// `Sync` because the pools print from several threads through one log.
 #[cfg_attr(test, mockall::automock)]
 pub trait Log: Sync {
     fn debug(&self, line: &str);
@@ -19,6 +20,7 @@ pub trait Log: Sync {
 /// only when what it holds may be sent to one.
 pub type Writer = Box<dyn Write + Send>;
 
+/// The real log: one bare line per message, on the two writers.
 pub struct Lines {
     out: Mutex<Writer>,
     err: Mutex<Writer>,
@@ -36,29 +38,29 @@ impl Lines {
 }
 
 // A write that fails has nowhere to be reported, so it is dropped.
-fn put(w: &Mutex<Writer>, line: &str) {
+fn write_line(writer: &Mutex<Writer>, line: &str) {
     // A thread that panicked mid-write poisons the lock; the writer is
     // still usable, so the next line goes out anyway.
-    let mut w = match w.lock() {
+    let mut writer = match writer.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    let _ = writeln!(w, "{line}");
+    let _ = writeln!(writer, "{line}");
 }
 
 impl Log for Lines {
     fn debug(&self, line: &str) {
         if self.verbose {
-            put(&self.out, line);
+            write_line(&self.out, line);
         }
     }
 
     fn info(&self, line: &str) {
-        put(&self.out, line);
+        write_line(&self.out, line);
     }
 
     fn error(&self, line: &str) {
-        put(&self.err, &format!("{BANNER} {line}"));
+        write_line(&self.err, &format!("{BANNER} {line}"));
     }
 }
 

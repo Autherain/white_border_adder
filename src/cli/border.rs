@@ -69,17 +69,30 @@ pub(crate) struct BorderArgs {
 impl App {
     pub(crate) fn border(&self, args: BorderArgs) -> anyhow::Result<()> {
         let dir = self.locate(&args.dir)?;
-        let out = match args.out {
-            None => Out::default(),
-            Some(p) => {
-                if std::path::Path::new(&p).is_absolute() {
-                    Out::At(self.locate(&p)?)
-                } else {
-                    Out::Beside(p)
-                }
-            }
-        };
-        let o = Options {
+        let workers = args.workers;
+        let options = self.border_options(args)?;
+
+        let jobs = crate::border::plan(&*self.log, &dir, &options)?;
+        if jobs.is_empty() {
+            self.log.info(&self.palette.faint("nothing to do"));
+            return Ok(());
+        }
+
+        let items = border_items(&dir, &jobs);
+        if !self.show(Verb::Write, &items, &[]) {
+            return Ok(());
+        }
+
+        let failed = self.write_all(&dir, jobs, &options, workers);
+        for line in self.recap(Verb::Write, &items, &[], Stage::Finished) {
+            self.log.info(&line);
+        }
+        failures(failed)
+    }
+
+    fn border_options(&self, args: BorderArgs) -> anyhow::Result<Options> {
+        let out = self.out_of(args.out)?;
+        Ok(Options {
             width: args.width,
             height: args.height,
             landscape: Ratios {
@@ -95,42 +108,46 @@ impl App {
             out,
             recursive: self.recursive,
             force: args.force,
-        };
-
-        let jobs = crate::border::plan(&*self.log, &dir, &o)?;
-        if jobs.is_empty() {
-            self.log.info(&self.palette.faint("nothing to do"));
-            return Ok(());
-        }
-
-        let items: Vec<Item> = jobs.iter().map(|j| border_item(&dir, j)).collect();
-        if !self.show(Verb::Write, &items, &[]) {
-            return Ok(());
-        }
-
-        let failed = self.write_all(&dir, jobs, &o, args.workers);
-        for line in self.recap(Verb::Write, &items, &[], Stage::Finished) {
-            self.log.info(&line);
-        }
-        failures(failed)
+        })
     }
 
-    fn write_all(&self, dir: &vfs::VfsPath, jobs: Vec<Job>, o: &Options, workers: usize) -> usize {
+    /// An absolute --out is one directory for every copy; a relative one is
+    /// created beside each photo directory.
+    fn out_of(&self, flag: Option<String>) -> anyhow::Result<Out> {
+        let path = match flag {
+            Some(p) => p,
+            None => return Ok(Out::default()),
+        };
+        if std::path::Path::new(&path).is_absolute() {
+            return Ok(Out::At(self.locate(&path)?));
+        }
+        Ok(Out::Beside(path))
+    }
+
+    /// Runs the jobs `workers` at a time, decoding being the slow part,
+    /// and prints each result as it comes. Returns how many failed.
+    fn write_all(
+        &self,
+        dir: &vfs::VfsPath,
+        jobs: Vec<Job>,
+        options: &Options,
+        workers: usize,
+    ) -> usize {
         let mut failed = 0;
         run_each(
             workers,
             jobs,
-            |j| j.run(o),
-            |r| match r {
+            |job| job.run(options),
+            |result| match result {
                 Ok(output) => self.log.info(&format!(
                     "{} {}",
                     self.palette.done("wrote"),
                     Self::rel(dir, &output)
                 )),
-                Err(e) => {
+                Err(failure) => {
                     failed += 1;
-                    self.log
-                        .error(&format!("{}: {}", Self::rel(dir, &e.input), e.source));
+                    let input = Self::rel(dir, &failure.input);
+                    self.log.error(&format!("{input}: {}", failure.source));
                 }
             },
         );
@@ -138,10 +155,18 @@ impl App {
     }
 }
 
-fn border_item(dir: &vfs::VfsPath, j: &Job) -> Item {
+fn border_items(dir: &vfs::VfsPath, jobs: &[Job]) -> Vec<Item> {
+    let mut items = Vec::new();
+    for job in jobs {
+        items.push(border_item(dir, job));
+    }
+    items
+}
+
+fn border_item(dir: &vfs::VfsPath, job: &Job) -> Item {
     Item {
-        dir: relative(dir, &j.input.parent()),
-        files: vec![relative(dir, &j.output)],
+        dir: relative(dir, &job.input.parent()),
+        files: vec![relative(dir, &job.output)],
         size: 0,
         warn: None,
         kept: None,
