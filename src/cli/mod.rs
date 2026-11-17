@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use vfs::VfsPath;
 
-use crate::log::{Lines, Log};
+use crate::log::{Lines, Log, Writer};
 use style::Palette;
 
 /// Set at build time with `WBA_VERSION=...`, as `git describe` names it.
@@ -88,9 +88,9 @@ struct App {
 /// whether `out` is a terminal.
 pub fn run(
     locate: Locate,
-    args: impl IntoIterator<Item = OsString>,
-    mut out: impl Write + Send + 'static,
-    mut err: impl Write + Send + 'static,
+    args: Vec<OsString>,
+    mut out: Writer,
+    mut err: Writer,
     colour: bool,
 ) -> ExitCode {
     let cli = match Cli::try_parse_from(args) {

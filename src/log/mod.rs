@@ -14,38 +14,29 @@ pub trait Log: Sync {
     fn error(&self, line: &str);
 }
 
-pub struct Lines<O, E> {
-    out: Mutex<O>,
-    err: Mutex<E>,
+/// Where lines go: stdout and stderr in `main`, a buffer in the tests.
+/// `Send` because `Log` is `Sync`: a `Mutex` may be shared between threads
+/// only when what it holds may be sent to one.
+pub type Writer = Box<dyn Write + Send>;
+
+pub struct Lines {
+    out: Mutex<Writer>,
+    err: Mutex<Writer>,
     verbose: bool,
 }
 
-impl<O: Write + Send, E: Write + Send> Lines<O, E> {
-    pub fn new(out: O, err: E, verbose: bool) -> Self {
+impl Lines {
+    pub fn new(out: Writer, err: Writer, verbose: bool) -> Self {
         Self {
             out: Mutex::new(out),
             err: Mutex::new(err),
             verbose,
         }
     }
-
-    /// Hands the writers back, which is how a test reads what was printed.
-    #[cfg(test)]
-    pub fn into_parts(self) -> (O, E) {
-        let out = match self.out.into_inner() {
-            Ok(w) => w,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        let err = match self.err.into_inner() {
-            Ok(w) => w,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        (out, err)
-    }
 }
 
 // A write that fails has nowhere to be reported, so it is dropped.
-fn put(w: &Mutex<impl Write>, line: &str) {
+fn put(w: &Mutex<Writer>, line: &str) {
     // A thread that panicked mid-write poisons the lock; the writer is
     // still usable, so the next line goes out anyway.
     let mut w = match w.lock() {
@@ -55,7 +46,7 @@ fn put(w: &Mutex<impl Write>, line: &str) {
     let _ = writeln!(w, "{line}");
 }
 
-impl<O: Write + Send, E: Write + Send> Log for Lines<O, E> {
+impl Log for Lines {
     fn debug(&self, line: &str) {
         if self.verbose {
             put(&self.out, line);

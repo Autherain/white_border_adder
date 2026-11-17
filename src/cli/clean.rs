@@ -97,10 +97,13 @@ impl App {
             return Ok(());
         }
 
-        let failed = self.delete_all(
-            &dir,
-            plan.candidates.into_iter().filter(|c| c.kept.is_none()),
-        );
+        let mut to_delete = Vec::new();
+        for c in plan.candidates {
+            if c.kept.is_none() {
+                to_delete.push(c);
+            }
+        }
+        let failed = self.delete_all(&dir, to_delete);
         for line in self.recap(Verb::Delete, &items, &skips, Stage::Finished) {
             self.log.info(&line);
         }
@@ -109,7 +112,7 @@ impl App {
 
     /// Removes the candidates one by one; a failure is reported and counted,
     /// the rest goes on.
-    fn delete_all(&self, dir: &vfs::VfsPath, candidates: impl Iterator<Item = Candidate>) -> usize {
+    fn delete_all(&self, dir: &vfs::VfsPath, candidates: Vec<Candidate>) -> usize {
         let mut failed = 0;
         for c in candidates {
             match c.delete() {

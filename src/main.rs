@@ -27,9 +27,9 @@ fn main() -> ExitCode {
     let colour = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     cli::run(
         locate,
-        std::env::args_os(),
-        std::io::stdout(),
-        std::io::stderr(),
+        std::env::args_os().collect(),
+        Box::new(std::io::stdout()),
+        Box::new(std::io::stderr()),
         colour,
     )
 }

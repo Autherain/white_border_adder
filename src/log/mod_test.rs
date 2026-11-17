@@ -1,23 +1,25 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use super::*;
+use crate::testfs::Buffer;
 
 #[test]
 fn levels() {
     for verbose in [false, true] {
-        let log = Lines::new(Vec::new(), Vec::new(), verbose);
+        let out = Buffer::default();
+        let err = Buffer::default();
+        let log = Lines::new(Box::new(out.clone()), Box::new(err.clone()), verbose);
         log.debug("skip a");
         log.info("would delete b");
         log.error("c: boom");
 
-        let (out, err) = log.into_parts();
         let want = if verbose {
             "skip a\nwould delete b\n"
         } else {
             "would delete b\n"
         };
-        assert_eq!(String::from_utf8_lossy(&out), want, "verbose={verbose}");
-        assert_eq!(String::from_utf8_lossy(&err), "####### c: boom\n");
+        assert_eq!(out.text(), want, "verbose={verbose}");
+        assert_eq!(err.text(), "####### c: boom\n");
     }
 }
 

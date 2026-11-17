@@ -27,6 +27,25 @@ Rule kept from Go: a type parameter is for a data type (`T` in a `[]T`,
 functions already took `&dyn Log`; now the whole crate uses the trait the
 one way.
 
+The same rule one floor down: `Lines` holds its two writers as
+`log::Writer`, an alias for `Box<dyn Write + Send>`, the way a Go struct
+holds two `io.Writer`. It used to be `Lines<O, E>`, which made `cli::run`
+generic as well. A test reads what was printed through the `testfs::Buffer`
+it kept a clone of.
+
+## `impl Trait` in an argument is a generic too
+
+`fn f(x: impl Write)` is `fn f<W: Write>(x: W)` without the brackets. The
+rule above applies to it unchanged:
+
+- a behaviour is `&dyn Trait` or `Box<dyn Trait>`;
+- a list is a `Vec<T>` or a `&[T]`, never `impl Iterator<Item = T>` or
+  `impl IntoIterator<Item = T>`. The caller builds the list with a `for`
+  and passes it, as it would pass a slice in Go.
+
+`run_each` keeps its `<T, R>` and its `impl Fn`: it is a tool that works on
+any item type, the case a type parameter is for.
+
 ## What each form costs, and why it does not matter here
 
 Calling a method through an interface is an indirect jump: the CPU reads

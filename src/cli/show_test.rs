@@ -12,7 +12,11 @@ use super::*;
 pub(crate) fn test_app(apply: bool, locate: Locate) -> (App, Buffer) {
     let out = Buffer::default();
     let app = App {
-        log: Box::new(Lines::new(out.clone(), Buffer::default(), false)),
+        log: Box::new(Lines::new(
+            Box::new(out.clone()),
+            Box::new(Buffer::default()),
+            false,
+        )),
         locate,
         palette: Palette::new(false),
         apply,

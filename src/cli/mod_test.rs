@@ -28,9 +28,9 @@ fn version_and_bad_flag() {
     let out = Buffer::default();
     let code = run(
         locate,
-        ["wba", "version"].map(OsString::from),
-        out.clone(),
-        Buffer::default(),
+        vec![OsString::from("wba"), OsString::from("version")],
+        Box::new(out.clone()),
+        Box::new(Buffer::default()),
         false,
     );
     assert_eq!(code, ExitCode::SUCCESS);
@@ -40,9 +40,14 @@ fn version_and_bad_flag() {
     let err = Buffer::default();
     let code = run(
         locate,
-        ["wba", "clean", "--nope", "d"].map(OsString::from),
-        Buffer::default(),
-        err.clone(),
+        vec![
+            OsString::from("wba"),
+            OsString::from("clean"),
+            OsString::from("--nope"),
+            OsString::from("d"),
+        ],
+        Box::new(Buffer::default()),
+        Box::new(err.clone()),
         false,
     );
     assert_ne!(code, ExitCode::SUCCESS);

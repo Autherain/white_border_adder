@@ -78,14 +78,20 @@ impl App {
             return Ok(());
         }
 
-        let failed = self.move_all(&dir, moves.into_iter().filter(|m| m.kept.is_none()));
+        let mut to_run = Vec::new();
+        for m in moves {
+            if m.kept.is_none() {
+                to_run.push(m);
+            }
+        }
+        let failed = self.move_all(&dir, to_run);
         for line in self.recap(Verb::Move, &items, &[], Stage::Finished) {
             self.log.info(&line);
         }
         failures(failed)
     }
 
-    fn move_all(&self, dir: &VfsPath, moves: impl Iterator<Item = Move>) -> usize {
+    fn move_all(&self, dir: &VfsPath, moves: Vec<Move>) -> usize {
         let mut failed = 0;
         for m in moves {
             match m.run() {
