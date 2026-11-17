@@ -289,7 +289,7 @@ fn converted_names(converted: Option<&Entry>) -> Option<Converted> {
 /// matching it when --only is given.
 fn kept(rel: &str, o: &Options) -> Option<Kept> {
     if let Some(g) = glob::matching(rel, &o.exclude) {
-        return Some(Kept::Excluded(g.clone()));
+        return Some(Kept::Excluded(g));
     }
     if !o.only.is_empty() && glob::matching(rel, &o.only).is_none() {
         return Some(Kept::NotInOnly(o.only.clone()));
