@@ -74,7 +74,7 @@ pub fn plan(
     read.sort_by(|a, b| a.photo.path.as_str().cmp(b.photo.path.as_str()));
 
     let mut p = Planner {
-        root: &root,
+        root,
         listed: HashMap::new(),
         taken: HashMap::new(),
     };
@@ -253,8 +253,8 @@ fn left_out(log: &dyn Log, photos: Vec<Photo>, root: &VfsPath, exclude: &[Glob])
     kept
 }
 
-struct Planner<'a> {
-    root: &'a VfsPath,
+struct Planner {
+    root: VfsPath,
     /// The dated folders of each year directory, listed once.
     listed: HashMap<String, Vec<String>>,
     /// Planned destination to its source, so two cards with an IMG_0001.JPG
@@ -271,7 +271,7 @@ fn kept(from: VfsPath, why: Kept) -> Move {
     }
 }
 
-impl Planner<'_> {
+impl Planner {
     /// `None` when the photo stays where it is and nothing is listed.
     fn decide(&mut self, d: Dated) -> Option<Move> {
         let from = d.photo.path.clone();
@@ -286,22 +286,22 @@ impl Planner<'_> {
         let dated = |name: &str| name.starts_with(&day) || name.starts_with(&iso);
 
         let parent = from.parent();
-        let parts = match below(self.root, &parent) {
+        let parts = match below(&self.root, &parent) {
             Some(p) => p,
             None => Vec::new(),
         };
 
-        if parts.len() >= 2 && parts[0] == year && dated(parts[1]) {
+        if parts.len() >= 2 && parts[0] == year && dated(&parts[1]) {
             return None;
         }
 
         // The dated folder the photo already sits in, at the top or just
         // under a year folder, keeps its name; what is below it follows.
         let mut name = String::new();
-        let mut sub: &[&str] = &[];
+        let mut sub: &[String] = &[];
         for i in 0..parts.len().min(2) {
-            if dated(parts[i]) && (i == 0 || is_year(parts[0])) {
-                name = parts[i].to_owned();
+            if dated(&parts[i]) && (i == 0 || is_year(&parts[0])) {
+                name = parts[i].clone();
                 sub = &parts[i + 1..];
                 break;
             }

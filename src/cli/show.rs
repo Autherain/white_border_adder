@@ -89,21 +89,17 @@ impl App {
         }
 
         let groups = by_directory(items);
-        for (dir, group) in &groups {
-            let run: Vec<&Item> = group.iter().copied().filter(|it| it.runs()).collect();
-            if run.is_empty() {
+        for g in &groups {
+            if g.run.is_empty() {
                 continue;
             }
             // One directory needs no header; several get a banner each so the
             // eye finds where a folder starts in a long list.
             if groups.len() > 1 {
-                self.log.info(
-                    &self
-                        .palette
-                        .bold(&format!("{BANNER} {dir}: {}", summary(&run))),
-                );
+                let banner = format!("{BANNER} {}: {}", g.dir, summary(&g.run));
+                self.log.info(&self.palette.bold(&banner));
             }
-            for it in run {
+            for it in &g.run {
                 self.show_item(verb, it);
             }
         }
@@ -140,7 +136,12 @@ impl App {
         at: Stage,
     ) -> Vec<String> {
         let groups = by_directory(items);
-        let (run, kept): (Vec<&Item>, Vec<&Item>) = items.iter().partition(|it| it.runs());
+        let mut run = Vec::new();
+        let mut kept = Vec::new();
+        for g in &groups {
+            run.extend_from_slice(&g.run);
+            kept.extend_from_slice(&g.kept);
+        }
 
         let mut lines = Vec::new();
         if groups.len() > 1 || !kept.is_empty() || !skips.is_empty() {
@@ -148,11 +149,24 @@ impl App {
             lines.extend(self.recap_groups(verb, &groups, skips, at));
         }
 
-        let flagged: Vec<&&Item> = run.iter().filter(|it| it.warn.is_some()).collect();
-        if let Some(first) = flagged.first()
-            && let Some(warn) = first.warn
-        {
-            let line = format!("{BANNER} {} flagged: {warn}", files(flagged.len()));
+        let mut flagged = 0;
+        let mut first_warn = None;
+        // Over `items`, not `run`: the warning named is the first one listed.
+        for it in items {
+            if !it.runs() {
+                continue;
+            }
+            let warn = match it.warn {
+                Some(w) => w,
+                None => continue,
+            };
+            if first_warn.is_none() {
+                first_warn = Some(warn);
+            }
+            flagged += 1;
+        }
+        if let Some(warn) = first_warn {
+            let line = format!("{BANNER} {} flagged: {warn}", files(flagged));
             lines.push(self.palette.gone(&line));
         }
 
@@ -190,13 +204,13 @@ impl App {
     fn recap_groups(
         &self,
         verb: Verb,
-        groups: &[(&str, Vec<&Item>)],
+        groups: &[Group],
         skips: &[Skipped],
         at: Stage,
     ) -> Vec<String> {
         let mut width = 0;
-        for (dir, _) in groups {
-            width = width.max(dir.len());
+        for g in groups {
+            width = width.max(g.dir.len());
         }
         for sk in skips {
             width = width.max(sk.dir.len());
@@ -208,17 +222,17 @@ impl App {
         };
 
         let mut lines = Vec::new();
-        for (dir, group) in groups {
-            let (run, kept): (Vec<&Item>, Vec<&Item>) = group.iter().partition(|it| it.runs());
-            if !run.is_empty() {
-                lines.push(format!("{action:<7} {dir:<width$}  {}", summary(&run)));
+        for g in groups {
+            let dir = &g.dir;
+            if !g.run.is_empty() {
+                lines.push(format!("{action:<7} {dir:<width$}  {}", summary(&g.run)));
             }
-            if !kept.is_empty() {
+            if !g.kept.is_empty() {
                 let line = format!(
                     "{:<7} {dir:<width$}  {}  {}",
                     "keep",
-                    summary(&kept),
-                    reasons(&kept).join(", ")
+                    summary(&g.kept),
+                    reasons(&g.kept).join(", ")
                 );
                 lines.push(self.palette.faint(&line));
             }
@@ -234,7 +248,7 @@ impl App {
 }
 
 /// Words the total once the verb ran: "3 files deleted, 49 MB freed".
-fn ran(verb: Verb, run: &[&Item]) -> String {
+fn ran(verb: Verb, run: &[Item]) -> String {
     let n: usize = run.iter().map(|it| it.files.len()).sum();
     let total: u64 = run.iter().map(|it| it.size).sum();
     match verb {
@@ -245,7 +259,7 @@ fn ran(verb: Verb, run: &[&Item]) -> String {
 }
 
 /// "3 files, 49 MB", or just the count when sizes are unknown.
-fn summary(items: &[&Item]) -> String {
+fn summary(items: &[Item]) -> String {
     let n: usize = items.iter().map(|it| it.files.len()).sum();
     let total: u64 = items.iter().map(|it| it.size).sum();
     if total == 0 {
@@ -255,25 +269,49 @@ fn summary(items: &[&Item]) -> String {
 }
 
 /// The distinct reasons that kept these items, in order of appearance.
-fn reasons<'a>(kept: &[&'a Item]) -> Vec<&'a str> {
-    let mut out: Vec<&str> = Vec::new();
+fn reasons(kept: &[Item]) -> Vec<String> {
+    let mut out = Vec::new();
     for it in kept {
-        if let Some(k) = it.kept.as_deref()
-            && !out.contains(&k)
-        {
-            out.push(k);
+        let why = match &it.kept {
+            Some(w) => w,
+            None => continue,
+        };
+        if !out.contains(why) {
+            out.push(why.clone());
         }
     }
     out
 }
 
+/// The items of one photo directory, those that run apart from those kept.
+struct Group {
+    dir: String,
+    run: Vec<Item>,
+    kept: Vec<Item>,
+}
+
 /// Splits the items by directory, in order of appearance.
-fn by_directory(items: &[Item]) -> Vec<(&str, Vec<&Item>)> {
-    let mut groups: Vec<(&str, Vec<&Item>)> = Vec::new();
+fn by_directory(items: &[Item]) -> Vec<Group> {
+    let mut groups: Vec<Group> = Vec::new();
     for it in items {
-        match groups.iter_mut().find(|(d, _)| *d == it.dir) {
-            Some((_, group)) => group.push(it),
-            None => groups.push((&it.dir, vec![it])),
+        let mut at = groups.len();
+        for (i, g) in groups.iter().enumerate() {
+            if g.dir == it.dir {
+                at = i;
+                break;
+            }
+        }
+        if at == groups.len() {
+            groups.push(Group {
+                dir: it.dir.clone(),
+                run: Vec::new(),
+                kept: Vec::new(),
+            });
+        }
+        if it.runs() {
+            groups[at].run.push(it.clone());
+        } else {
+            groups[at].kept.push(it.clone());
         }
     }
     groups

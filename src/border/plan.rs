@@ -26,29 +26,27 @@ pub fn plan(log: &dyn Log, dir: &VfsPath, o: &Options) -> Result<Vec<Job>, Error
     }
 
     let mut p = Planner {
-        log,
-        dir,
-        o,
+        dir: dir.clone(),
+        o: o.clone(),
         jobs: Vec::new(),
     };
-    p.scan(dir)?;
+    p.scan(log, dir)?;
     p.jobs
         .sort_by(|a, b| a.input.as_str().cmp(b.input.as_str()));
     Ok(p.jobs)
 }
 
-struct Planner<'a> {
-    log: &'a dyn Log,
-    dir: &'a VfsPath,
-    o: &'a Options,
+struct Planner {
+    dir: VfsPath,
+    o: Options,
     jobs: Vec<Job>,
 }
 
-impl Planner<'_> {
+impl Planner {
     /// Lists `dir` once: its images become jobs and, when recursive, its
     /// subdirectories are scanned in turn. One listing per directory and
     /// one per output directory is what keeps a network mount bearable.
-    fn scan(&mut self, dir: &VfsPath) -> Result<(), Error> {
+    fn scan(&mut self, log: &dyn Log, dir: &VfsPath) -> Result<(), Error> {
         let entries: Vec<VfsPath> = match dir.read_dir() {
             Ok(entries) => entries.collect(),
             Err(e) => return Err(Error::Read(dir.as_str().to_owned(), e)),
@@ -58,10 +56,10 @@ impl Planner<'_> {
         for entry in entries {
             if entry.is_dir()? {
                 if self.o.recursive && !self.skip_dir(&entry.filename()) {
-                    self.scan(&entry)?;
+                    self.scan(log, &entry)?;
                 }
             } else if entry.is_file()? {
-                self.add(dir, entry, &existing);
+                self.add(log, dir, entry, &existing);
             }
         }
         Ok(())
@@ -113,7 +111,7 @@ impl Planner<'_> {
         }
     }
 
-    fn add(&mut self, dir: &VfsPath, input: VfsPath, existing: &HashSet<String>) {
+    fn add(&mut self, log: &dyn Log, dir: &VfsPath, input: VfsPath, existing: &HashSet<String>) {
         let name = input.filename();
         if !is_image(&name) {
             return;
@@ -121,9 +119,9 @@ impl Planner<'_> {
 
         let out_name = format!("{}{name}", self.o.prefix);
         if existing.contains(&out_name) {
-            self.log.debug(&format!(
+            log.debug(&format!(
                 "skip {}: output exists",
-                relative(self.dir, &input)
+                relative(&self.dir, &input)
             ));
             return;
         }

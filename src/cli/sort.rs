@@ -1,4 +1,5 @@
 use crate::glob::Glob;
+use crate::path::relative;
 use crate::sorter::{ExifOrMtime, Move, Options};
 use clap::Args;
 use vfs::VfsPath;
@@ -117,36 +118,41 @@ impl App {
     }
 }
 
-/// A kept move without a target touches nothing and is listed by its source.
 fn sort_item(dir: &VfsPath, m: &Move) -> Item {
-    let (group, files) = match &m.to {
-        Some(to) => (
-            crate::path::relative(dir, &to.parent()),
-            m.pairs()
-                .iter()
-                .map(|p| {
-                    format!(
-                        "{} -> {}",
-                        crate::path::relative(dir, &p.from),
-                        crate::path::relative(dir, &p.to)
-                    )
-                })
-                .collect(),
-        ),
-        None => (
-            crate::path::relative(dir, &m.from.parent()),
-            vec![crate::path::relative(dir, &m.from)],
-        ),
+    let kept = match &m.kept {
+        Some(why) => Some(why.to_string()),
+        None => None,
     };
+
+    let to = match &m.to {
+        Some(to) => to,
+        // A kept move without a target touches nothing and is listed by
+        // its source.
+        None => {
+            return Item {
+                dir: relative(dir, &m.from.parent()),
+                files: vec![relative(dir, &m.from)],
+                size: 0,
+                warn: None,
+                kept,
+            };
+        }
+    };
+
+    let mut files = Vec::new();
+    for p in m.pairs() {
+        files.push(format!(
+            "{} -> {}",
+            relative(dir, &p.from),
+            relative(dir, &p.to)
+        ));
+    }
     Item {
-        dir: group,
+        dir: relative(dir, &to.parent()),
         files,
         size: 0,
         warn: None,
-        kept: match &m.kept {
-            Some(why) => Some(why.to_string()),
-            None => None,
-        },
+        kept,
     }
 }
 

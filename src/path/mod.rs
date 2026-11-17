@@ -6,15 +6,18 @@ use vfs::VfsPath;
 
 /// The components of `path` under `base`; `None` when `path` is `base` itself
 /// or outside it.
-pub fn below<'p>(base: &VfsPath, path: &'p VfsPath) -> Option<Vec<&'p str>> {
-    let rest = path
-        .as_str()
-        .strip_prefix(base.as_str())?
-        .strip_prefix('/')?;
+pub fn below(base: &VfsPath, path: &VfsPath) -> Option<Vec<String>> {
+    let rest = path.as_str().strip_prefix(base.as_str())?;
+    let rest = rest.strip_prefix('/')?;
     if rest.is_empty() {
         return None;
     }
-    Some(rest.split('/').collect())
+
+    let mut parts = Vec::new();
+    for part in rest.split('/') {
+        parts.push(part.to_owned());
+    }
+    Some(parts)
 }
 
 /// `path` relative to `base`: "." for the base itself, "../x" for a sibling.

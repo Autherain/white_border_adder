@@ -25,6 +25,17 @@ Rules applied to the production code:
 - Tests use `.unwrap()`: a fixture that fails to build is a broken test,
   not a case to handle.
 
+- No named lifetime (`<'a>`) in a struct or a signature. A struct owns
+  what it holds and a function returns owned values: `Planner` clones its
+  `VfsPath` and `Options`, `path::below` returns `Vec<String>`,
+  `glob::matching` returns a clone of the `Glob`. The copies are a few
+  strings per photo next to a read or a rename per photo. A borrowed
+  argument (`&VfsPath`, `&dyn Log`) is passed to the method that needs it
+  rather than stored. The `<'_>` in `fmt::Formatter<'_>` and
+  `MutexGuard<'_, T>` are the standard library's own signatures.
+- A pair with a meaning is a struct with named fields, not a tuple:
+  `show::Group { dir, run, kept }`, not `(&str, Vec<&Item>)`.
+
 Three rules decide how a fallible call is written:
 
 1. `?` when the error goes up unchanged. It is Go's
@@ -34,6 +45,10 @@ Three rules decide how a fallible call is written:
    ```rust
    let abs = std::path::absolute(arg)?;
    ```
+
+   On an `Option` the same `?` means "return `None`". One `?` per
+   statement, never two chained on a line; clippy's `question_mark`
+   refuses the two-arm `match` that would only return `None`.
 
 2. A two-arm `match` when the failing branch does something: wraps the
    error in this module's variant, picks a fallback, skips the item or

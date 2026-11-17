@@ -16,20 +16,23 @@ fn a_malformed_glob_does_not_parse() {
 #[test]
 fn matching_sees_stem_directories_and_path() {
     let g = globs(&["IMG_12*", "*marie*", "20250804_luchon/_131075*"]);
-    let hit = |rel: &str| matching(rel, &g).map(Glob::as_str);
+    let hit = |rel: &str| match matching(rel, &g) {
+        Some(found) => found.to_string(),
+        None => "nothing".to_owned(),
+    };
 
-    assert_eq!(hit("paris/IMG_1264.RW2"), Some("IMG_12*"));
-    assert_eq!(hit("marie/portrait/IMG_1.RW2"), Some("*marie*"));
+    assert_eq!(hit("paris/IMG_1264.RW2"), "IMG_12*");
+    assert_eq!(hit("marie/portrait/IMG_1.RW2"), "*marie*");
     assert_eq!(
         hit("2025/20250804_luchon/_1310752.RW2"),
-        None,
+        "nothing",
         "the path has a year on top"
     );
     assert_eq!(
         hit("20250804_luchon/_1310752.RW2"),
-        Some("20250804_luchon/_131075*")
+        "20250804_luchon/_131075*"
     );
-    assert_eq!(hit("paris/IMG_2000.RW2"), None);
+    assert_eq!(hit("paris/IMG_2000.RW2"), "nothing");
 }
 
 #[test]

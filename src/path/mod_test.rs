@@ -11,11 +11,11 @@ fn at(p: &str) -> VfsPath {
 fn below_splits_the_components_under_the_base() {
     assert_eq!(
         below(&at("r"), &at("r/2026/x.rw2")),
-        Some(vec!["2026", "x.rw2"])
+        Some(vec!["2026".to_owned(), "x.rw2".to_owned()])
     );
     assert_eq!(
         below(&at(""), &at("2026/x.rw2")),
-        Some(vec!["2026", "x.rw2"])
+        Some(vec!["2026".to_owned(), "x.rw2".to_owned()])
     );
     assert_eq!(below(&at("r"), &at("r")), None);
     assert_eq!(

@@ -5,6 +5,8 @@ use std::str::FromStr;
 
 use ::glob::{MatchOptions, Pattern};
 
+use crate::path::stem;
+
 /// A glob that parsed, so a plan never meets a malformed one: clap parses
 /// the flag straight into this type and rejects the bad ones itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,22 +70,26 @@ impl Glob {
 /// The first glob matching a photo's name without extension, a directory of
 /// its path, or that whole path, so `IMG_12*` targets a photo and `*marie*`
 /// targets a shoot. `rel` is the path below the argument, with `/`.
-pub fn matching<'g>(rel: &str, globs: &'g [Glob]) -> Option<&'g Glob> {
+pub fn matching(rel: &str, globs: &[Glob]) -> Option<Glob> {
     let stem = stem_of(rel);
-    globs
-        .iter()
-        .find(|g| g.matches(stem) || stem.split('/').any(|part| g.matches(part)))
+    for g in globs {
+        if g.matches(&stem) {
+            return Some(g.clone());
+        }
+        for part in stem.split('/') {
+            if g.matches(part) {
+                return Some(g.clone());
+            }
+        }
+    }
+    None
 }
 
 /// The path without the extension of its last component: "a/b.RW2" is "a/b".
-fn stem_of(rel: &str) -> &str {
-    let name_at = match rel.rfind('/') {
-        Some(slash) => slash + 1,
-        None => 0,
-    };
-    match rel[name_at..].rfind('.') {
-        Some(dot) => &rel[..name_at + dot],
-        None => rel,
+fn stem_of(rel: &str) -> String {
+    match rel.rsplit_once('/') {
+        Some((dir, name)) => format!("{dir}/{}", stem(name)),
+        None => stem(rel).to_owned(),
     }
 }
 
